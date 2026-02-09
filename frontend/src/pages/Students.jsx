@@ -20,6 +20,11 @@ const Students = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [parents, setParents] = useState([]);
+  const [showAddParent, setShowAddParent] = useState(false);
+  const [parentFormData, setParentFormData] = useState({
+    firstName: '', lastName: '', email: '', password: '', phone: '',
+  });
+  const [creatingParent, setCreatingParent] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', dateOfBirth: '', gender: 'male',
     admissionNumber: '', admissionDate: new Date().toISOString().split('T')[0],
@@ -77,6 +82,24 @@ const Students = () => {
       dispatch(fetchStudents({ page, limit: 10, search, class: classFilter }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Operation failed');
+    }
+  };
+
+  const handleAddParent = async (e) => {
+    e.preventDefault();
+    setCreatingParent(true);
+    try {
+      const res = await userApi.create({ ...parentFormData, role: 'parent' });
+      const newParent = res.data.data;
+      setParents(prev => [...prev, newParent]);
+      setFormData(prev => ({ ...prev, parent: newParent.id || newParent._id }));
+      setShowAddParent(false);
+      setParentFormData({ firstName: '', lastName: '', email: '', password: '', phone: '' });
+      toast.success('Parent created successfully');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create parent');
+    } finally {
+      setCreatingParent(false);
     }
   };
 
@@ -261,15 +284,57 @@ const Students = () => {
               <input type="text" className="input-field" value={formData.rollNumber}
                 onChange={(e) => setFormData({ ...formData, rollNumber: e.target.value })} />
             </div>
-            <div>
-              <label className="label">Parent *</label>
-              <select className="input-field" required value={formData.parent}
-                onChange={(e) => setFormData({ ...formData, parent: e.target.value })}>
-                <option value="">Select Parent</option>
-                {parents.map(p => (
-                  <option key={p._id} value={p._id}>{p.firstName} {p.lastName} ({p.email})</option>
-                ))}
-              </select>
+            <div className="sm:col-span-2">
+              <div className="flex items-center justify-between mb-1">
+                <label className="label mb-0">Parent *</label>
+                <button type="button" onClick={() => setShowAddParent(!showAddParent)}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
+                  <HiOutlinePlus className="h-3 w-3" /> {showAddParent ? 'Cancel' : 'New Parent'}
+                </button>
+              </div>
+              {showAddParent ? (
+                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500">First Name *</label>
+                      <input type="text" className="input-field" required value={parentFormData.firstName}
+                        onChange={(e) => setParentFormData({ ...parentFormData, firstName: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Last Name *</label>
+                      <input type="text" className="input-field" required value={parentFormData.lastName}
+                        onChange={(e) => setParentFormData({ ...parentFormData, lastName: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Email *</label>
+                      <input type="email" className="input-field" required value={parentFormData.email}
+                        onChange={(e) => setParentFormData({ ...parentFormData, email: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Password *</label>
+                      <input type="password" className="input-field" required value={parentFormData.password}
+                        onChange={(e) => setParentFormData({ ...parentFormData, password: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Phone</label>
+                      <input type="text" className="input-field" value={parentFormData.phone}
+                        onChange={(e) => setParentFormData({ ...parentFormData, phone: e.target.value })} />
+                    </div>
+                  </div>
+                  <button type="button" onClick={handleAddParent} disabled={creatingParent || !parentFormData.firstName || !parentFormData.lastName || !parentFormData.email || !parentFormData.password}
+                    className="btn-primary text-sm w-full disabled:opacity-50">
+                    {creatingParent ? 'Creating...' : 'Create Parent'}
+                  </button>
+                </div>
+              ) : (
+                <select className="input-field" required value={formData.parent}
+                  onChange={(e) => setFormData({ ...formData, parent: e.target.value })}>
+                  <option value="">Select Parent</option>
+                  {parents.map(p => (
+                    <option key={p._id || p.id} value={p._id || p.id}>{p.firstName} {p.lastName} ({p.email})</option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className="label">Blood Group</label>
