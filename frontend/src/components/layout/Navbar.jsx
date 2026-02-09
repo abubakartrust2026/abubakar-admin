@@ -26,11 +26,9 @@ const Navbar = () => {
             <HiOutlineMenuAlt2 className="h-5 w-5 text-gray-600" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">A</span>
-            </div>
+            <img src="/logo.png" alt="Logo" className="h-9 w-9 object-contain" />
             <div className="hidden sm:block">
-              <h1 className="text-sm font-bold text-gray-900">Abubakar English School</h1>
+              <h1 className="text-sm font-bold text-primary-800">Abubakar English School</h1>
               <p className="text-xs text-gray-500">Management System</p>
             </div>
           </div>
