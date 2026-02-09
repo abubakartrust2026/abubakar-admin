@@ -79,8 +79,8 @@ const paymentSchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate payment and receipt numbers before saving
-paymentSchema.pre('save', async function (next) {
+// Auto-generate payment and receipt numbers before validation
+paymentSchema.pre('validate', async function (next) {
   if (!this.paymentNumber) {
     const count = await mongoose.model('Payment').countDocuments();
     const year = new Date().getFullYear();
