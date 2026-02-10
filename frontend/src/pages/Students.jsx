@@ -141,10 +141,11 @@ const Students = () => {
           className="input-field w-full sm:w-40"
         >
           <option value="">All Classes</option>
-          {[...'12345678910'].filter((_, i, arr) => arr.indexOf(_) === i).map((c) => null)}
-          {['1','2','3','4','5','6','7','8','9','10'].map((c) => (
-            <option key={c} value={c}>Class {c}</option>
-          ))}
+          <option value="Jr. KG">Jr. KG</option>
+          <option value="Sr. KG">Sr. KG</option>
+          <option value="1">Class 1</option>
+          <option value="2">Class 2</option>
+          <option value="3">Class 3</option>
         </select>
       </div>
 
@@ -251,7 +252,6 @@ const Students = () => {
                 onChange={(e) => setFormData({ ...formData, gender: e.target.value })}>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
-                <option value="other">Other</option>
               </select>
             </div>
             <div>
@@ -269,9 +269,11 @@ const Students = () => {
               <select className="input-field" required value={formData.class}
                 onChange={(e) => setFormData({ ...formData, class: e.target.value })}>
                 <option value="">Select Class</option>
-                {['1','2','3','4','5','6','7','8','9','10'].map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+                <option value="Jr. KG">Jr. KG</option>
+                <option value="Sr. KG">Sr. KG</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
               </select>
             </div>
             <div>
@@ -343,8 +345,11 @@ const Students = () => {
             </div>
             <div>
               <label className="label">Academic Year</label>
-              <input type="text" className="input-field" value={formData.academicYear}
-                onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })} />
+              <select className="input-field" value={formData.academicYear}
+                onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}>
+                <option value="2025-2026">2025-26</option>
+                <option value="2026-2027">2026-27</option>
+              </select>
             </div>
           </div>
 
