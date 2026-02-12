@@ -122,7 +122,7 @@ const Fees = () => {
                 {fee.applicableFor?.classes?.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1">
                     {fee.applicableFor.classes.map(c => (
-                      <span key={c} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">Class {c}</span>
+                      <span key={c} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{['Jr. KG', 'Sr. KG', 'all'].includes(c) ? (c === 'all' ? 'All' : c) : `Class ${c}`}</span>
                     ))}
                   </div>
                 )}
@@ -165,13 +165,13 @@ const Fees = () => {
           <div>
             <label className="label">Applicable Classes</label>
             <div className="flex flex-wrap gap-2 mt-1">
-              {['1','2','3','4','5','6','7','8','9','10','all'].map(c => (
+              {['Jr. KG','Sr. KG','1','2','3','4','5','6','7','8','9','10','all'].map(c => (
                 <button key={c} type="button" onClick={() => handleClassToggle(c)}
                   className={`px-3 py-1 rounded-full text-xs font-medium ${
                     formData.applicableFor?.classes?.includes(c)
                       ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-500'
                   }`}>
-                  {c === 'all' ? 'All' : `Class ${c}`}
+                  {c === 'all' ? 'All' : ['Jr. KG', 'Sr. KG'].includes(c) ? c : `Class ${c}`}
                 </button>
               ))}
             </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { HiOutlinePlus, HiOutlineEye } from 'react-icons/hi';
+import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { fetchInvoices, fetchFees } from '../store/slices/feeSlice';
 import { invoiceApi } from '../api/feeApi';
@@ -90,6 +91,32 @@ const Invoices = () => {
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create invoice');
     }
+  };
+
+  const handleWhatsAppShare = (invoice) => {
+    const phone = invoice.parent?.phone;
+    if (!phone) {
+      toast.error('Parent phone number not available');
+      return;
+    }
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const items = invoice.items?.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n') || '';
+    const message = `*Abubakar Trust - Fee Invoice*
+
+*Invoice:* ${invoice.invoiceNumber}
+*Student:* ${invoice.student?.firstName} ${invoice.student?.lastName} (Class ${invoice.student?.class || ''})
+*Date:* ${formatDate(invoice.createdAt)}
+
+*Items:*
+${items}
+
+*Total:* ${formatCurrency(invoice.total)}
+*Due Date:* ${formatDate(invoice.dueDate)}
+*Status:* ${invoice.status?.replace('_', ' ')}${invoice.amountPaid != null ? `\n*Paid:* ${formatCurrency(invoice.amountPaid)}\n*Due:* ${formatCurrency(invoice.amountDue)}` : ''}
+
+Thank you,
+Abubakar Trust`;
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   const handleViewInvoice = async (id) => {
@@ -197,6 +224,14 @@ const Invoices = () => {
               <div><span className="text-gray-500">Student:</span> <strong>{viewInvoice.student?.firstName} {viewInvoice.student?.lastName}</strong></div>
               <div><span className="text-gray-500">Due Date:</span> <strong>{formatDate(viewInvoice.dueDate)}</strong></div>
             </div>
+            {isAdmin && (
+              <div className="flex justify-end">
+                <button onClick={() => handleWhatsAppShare(viewInvoice)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium">
+                  <FaWhatsapp className="h-4 w-4" /> Share on WhatsApp
+                </button>
+              </div>
+            )}
             <table className="w-full text-sm border-t mt-4">
               <thead><tr className="border-b"><th className="py-2 text-left text-gray-500">Item</th><th className="py-2 text-right text-gray-500">Amount</th></tr></thead>
               <tbody>
