@@ -20,6 +20,7 @@ export const ATTENDANCE_STATUS = {
 export const FEE_FREQUENCY = {
   MONTHLY: 'monthly',
   QUARTERLY: 'quarterly',
+  HALF_YEARLY: 'half-yearly',
   YEARLY: 'yearly',
   ONE_TIME: 'one-time',
 };
