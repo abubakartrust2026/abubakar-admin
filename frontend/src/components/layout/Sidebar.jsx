@@ -7,6 +7,7 @@ import {
   HiOutlineCurrencyRupee,
   HiOutlineDocumentText,
   HiOutlineCreditCard,
+  HiOutlineChartBar,
 } from 'react-icons/hi';
 
 const Sidebar = () => {
@@ -20,6 +21,7 @@ const Sidebar = () => {
     { to: '/fees', icon: HiOutlineCurrencyRupee, label: 'Fee Structure' },
     { to: '/invoices', icon: HiOutlineDocumentText, label: 'Invoices' },
     { to: '/payments', icon: HiOutlineCreditCard, label: 'Payments' },
+    { to: '/reports', icon: HiOutlineChartBar, label: 'Reports' },
   ];
 
   const parentLinks = [

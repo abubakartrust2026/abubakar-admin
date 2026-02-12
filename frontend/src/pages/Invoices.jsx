@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { HiOutlinePlus, HiOutlineEye } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineEye, HiOutlineTrash } from 'react-icons/hi';
 import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { fetchInvoices, fetchFees } from '../store/slices/feeSlice';
@@ -128,6 +128,17 @@ Abubakar Trust`;
     }
   };
 
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this invoice? This cannot be undone.')) return;
+    try {
+      await invoiceApi.delete(id);
+      toast.success('Invoice deleted');
+      dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined }));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete invoice');
+    }
+  };
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -184,10 +195,15 @@ Abubakar Trust`;
                           {inv.status?.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3 px-4 text-right flex items-center justify-end gap-1">
                         <button onClick={() => handleViewInvoice(inv._id)} className="p-1.5 hover:bg-gray-100 rounded">
                           <HiOutlineEye className="h-4 w-4 text-gray-500" />
                         </button>
+                        {isAdmin && (
+                          <button onClick={() => handleDelete(inv._id)} className="p-1.5 hover:bg-gray-100 rounded">
+                            <HiOutlineTrash className="h-4 w-4 text-red-500" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))

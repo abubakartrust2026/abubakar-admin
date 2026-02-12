@@ -9,6 +9,7 @@ import Attendance from './pages/Attendance';
 import Fees from './pages/Fees';
 import Invoices from './pages/Invoices';
 import Payments from './pages/Payments';
+import Reports from './pages/Reports';
 import NotFound from './pages/NotFound';
 
 // Layouts & Auth
@@ -41,6 +42,7 @@ function App() {
         <Route path="fees" element={<RoleBasedRoute allowedRoles={['admin']}><Fees /></RoleBasedRoute>} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="reports" element={<RoleBasedRoute allowedRoles={['admin']}><Reports /></RoleBasedRoute>} />
       </Route>
 
       {/* 404 Route */}

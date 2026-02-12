@@ -157,6 +157,7 @@ const Fees = () => {
                 onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}>
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
+                <option value="half-yearly">Half-Yearly</option>
                 <option value="yearly">Yearly</option>
                 <option value="one-time">One-time</option>
               </select>
