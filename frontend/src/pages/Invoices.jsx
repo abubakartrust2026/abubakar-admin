@@ -19,6 +19,8 @@ const Invoices = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [students, setStudents] = useState([]);
+  const [selectedClass, setSelectedClass] = useState('');
+  const [classFilter, setClassFilter] = useState('');
   const [viewInvoice, setViewInvoice] = useState(null);
   const [formData, setFormData] = useState({
     student: '', parent: '', items: [{ fee: '', description: '', amount: 0 }],
@@ -35,6 +37,8 @@ const Invoices = () => {
       studentApi.getAll({ limit: 100 }).then(res => setStudents(res.data.data)).catch(() => {});
     }
   }, [isAdmin]);
+
+  const classes = Array.from(new Set(students.map(s => s.class).filter(Boolean))).sort();
 
   const handleAddItem = () => {
     setFormData(prev => ({
@@ -75,6 +79,12 @@ const Invoices = () => {
     }));
   };
 
+  const handleClassSelect = (cls) => {
+    setSelectedClass(cls);
+    // clear selected student when class changes
+    setFormData(prev => ({ ...prev, student: '' }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -99,7 +109,11 @@ const Invoices = () => {
       toast.error('Parent phone number not available');
       return;
     }
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    let cleanPhone = phone.replace(/[^0-9]/g, '');
+    // Add +91 country code if not already present
+    if (!cleanPhone.startsWith('91')) {
+      cleanPhone = '91' + cleanPhone;
+    }
     const items = invoice.items?.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n') || '';
     const message = `*Abubakar Trust - Fee Invoice*
 
@@ -277,12 +291,21 @@ Abubakar Trust`;
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
+              <label className="label">Class</label>
+              <select className="input-field" value={selectedClass} onChange={(e) => handleClassSelect(e.target.value)}>
+                <option value="">All Classes</option>
+                {classes.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="label">Student *</label>
               <select className="input-field" required value={formData.student} onChange={(e) => handleStudentSelect(e.target.value)}>
                 <option value="">Select Student</option>
-                {students.map(s => (
-                  <option key={s._id} value={s._id}>{s.firstName} {s.lastName} (Class {s.class})</option>
-                ))}
+                {students
+                  .filter(s => !selectedClass || s.class === selectedClass)
+                  .map(s => (
+                    <option key={s._id} value={s._id}>{s.firstName} {s.lastName} (Class {s.class})</option>
+                  ))}
               </select>
             </div>
             <div>
@@ -295,10 +318,12 @@ Abubakar Trust`;
             <label className="label">Items</label>
             {formData.items.map((item, idx) => (
               <div key={idx} className="flex gap-2 mb-2">
-                <select className="input-field flex-1" value={item.fee} onChange={(e) => handleItemChange(idx, 'fee', e.target.value)}>
+                <select className="input-field w-64" value={item.fee} onChange={(e) => handleItemChange(idx, 'fee', e.target.value)}>
                   <option value="">Select Fee</option>
                   {fees.map(f => <option key={f._id} value={f._id}>{f.name} ({formatCurrency(f.amount)})</option>)}
                 </select>
+                <input type="text" className="input-field flex-1" value={item.description}
+                  onChange={(e) => handleItemChange(idx, 'description', e.target.value)} placeholder="Description" />
                 <input type="number" className="input-field w-32" min="0" value={item.amount}
                   onChange={(e) => handleItemChange(idx, 'amount', e.target.value)} placeholder="Amount" />
                 {formData.items.length > 1 && (
