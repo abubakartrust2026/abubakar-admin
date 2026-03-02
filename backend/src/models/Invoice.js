@@ -113,7 +113,6 @@ invoiceSchema.methods.getAmountDue = async function () {
 };
 
 // Indexes
-invoiceSchema.index({ invoiceNumber: 1 });
 invoiceSchema.index({ student: 1 });
 invoiceSchema.index({ parent: 1 });
 invoiceSchema.index({ status: 1 });

@@ -107,7 +107,6 @@ userSchema.methods.toPublicJSON = function () {
 };
 
 // Index for faster queries
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 
 const User = mongoose.model('User', userSchema);

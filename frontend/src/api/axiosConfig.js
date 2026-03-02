@@ -3,7 +3,7 @@ import { store } from '../store/store';
 import { updateToken, logout } from '../store/slices/authSlice';
 
 const axiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:6001/api',
   headers: {
     'Content-Type': 'application/json',
   },

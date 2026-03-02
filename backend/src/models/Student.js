@@ -107,7 +107,6 @@ studentSchema.methods.getFullName = function () {
 };
 
 // Indexes for faster queries
-studentSchema.index({ admissionNumber: 1 });
 studentSchema.index({ parent: 1 });
 studentSchema.index({ class: 1, section: 1 });
 studentSchema.index({ status: 1 });

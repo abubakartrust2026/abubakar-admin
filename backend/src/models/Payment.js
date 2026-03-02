@@ -97,8 +97,6 @@ paymentSchema.pre('validate', async function (next) {
 });
 
 // Indexes
-paymentSchema.index({ paymentNumber: 1 });
-paymentSchema.index({ receiptNumber: 1 });
 paymentSchema.index({ invoice: 1 });
 paymentSchema.index({ student: 1 });
 paymentSchema.index({ parent: 1 });
