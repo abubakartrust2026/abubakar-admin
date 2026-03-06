@@ -115,7 +115,7 @@ const Invoices = () => {
       cleanPhone = '91' + cleanPhone;
     }
     const items = invoice.items?.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n') || '';
-    const message = `*Abubakar Trust - Fee Invoice*
+    const message = `*Abubakar English School - Fee Invoice*
 
 *Invoice:* ${invoice.invoiceNumber}
 *Student:* ${invoice.student?.firstName} ${invoice.student?.lastName} (Class ${invoice.student?.class || ''})
@@ -129,7 +129,7 @@ ${items}
 *Status:* ${invoice.status?.replace('_', ' ')}${invoice.amountPaid != null ? `\n*Paid:* ${formatCurrency(invoice.amountPaid)}\n*Due:* ${formatCurrency(invoice.amountDue)}` : ''}
 
 Thank you,
-Abubakar Trust`;
+Abubakar English School`;
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
