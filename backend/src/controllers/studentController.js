@@ -2,6 +2,8 @@ import asyncHandler from 'express-async-handler';
 import Student from '../models/Student.js';
 import User from '../models/User.js';
 
+const CLASS_ORDER = ['Jr. KG', 'Sr. KG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+
 // @desc    Get all students
 // @route   GET /api/students
 // @access  Private/Admin
@@ -186,4 +188,44 @@ export const getStudentsByClass = asyncHandler(async (req, res) => {
     .sort({ rollNumber: 1 });
 
   res.status(200).json({ success: true, data: students });
+});
+
+// @desc    Bulk promote students to next class
+// @route   POST /api/students/promote
+// @access  Private/Admin
+export const promoteStudents = asyncHandler(async (req, res) => {
+  const { fromClass, studentIds, newAcademicYear, resetRollNumber } = req.body;
+
+  if (!fromClass || !CLASS_ORDER.includes(fromClass)) {
+    res.status(400);
+    throw new Error('Invalid class specified');
+  }
+
+  const currentIndex = CLASS_ORDER.indexOf(fromClass);
+  const isLastClass = currentIndex === CLASS_ORDER.length - 1;
+  const toClass = isLastClass ? null : CLASS_ORDER[currentIndex + 1];
+
+  const filter = { class: fromClass, status: 'active' };
+  if (studentIds && studentIds.length > 0) {
+    filter._id = { $in: studentIds };
+  }
+
+  const updateFields = isLastClass
+    ? { status: 'graduated' }
+    : { class: toClass };
+
+  if (newAcademicYear) updateFields.academicYear = newAcademicYear;
+  if (resetRollNumber) updateFields.rollNumber = '';
+
+  const result = await Student.updateMany(filter, { $set: updateFields });
+
+  const message = isLastClass
+    ? `${result.modifiedCount} students graduated from Class ${fromClass}`
+    : `${result.modifiedCount} students promoted to Class ${toClass}`;
+
+  res.status(200).json({
+    success: true,
+    message,
+    data: { modifiedCount: result.modifiedCount, fromClass, toClass: toClass ?? 'GRADUATED' },
+  });
 });

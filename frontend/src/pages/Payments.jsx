@@ -18,9 +18,12 @@ const Payments = () => {
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [allStudents, setAllStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentSearch, setStudentSearch] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentInvoices, setStudentInvoices] = useState([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [formData, setFormData] = useState({
     invoice: '', amount: '', paymentMethod: 'cash', remarks: '',
@@ -32,11 +35,14 @@ const Payments = () => {
   }, [dispatch, page]);
 
   const loadStudents = async () => {
+    setStudentsLoading(true);
     try {
       const res = await studentApi.getAll({ limit: 200, status: 'active' });
       setAllStudents(res.data.data || []);
     } catch (err) {
-      console.error(err);
+      toast.error('Failed to load students');
+    } finally {
+      setStudentsLoading(false);
     }
   };
 
@@ -44,6 +50,9 @@ const Payments = () => {
     loadStudents();
     setShowForm(true);
   };
+
+  // Show dropdown when focused (even empty) OR when typing without a selection
+  const showDropdown = searchFocused && !selectedStudent;
 
   const filteredStudents = useMemo(() => {
     if (!studentSearch.trim()) return allStudents.slice(0, 20);
@@ -58,8 +67,10 @@ const Payments = () => {
   const handleStudentSelect = async (student) => {
     setSelectedStudent(student);
     setStudentSearch(`${student.firstName} ${student.lastName}`);
+    setSearchFocused(false);
     setSelectedInvoice(null);
     setFormData(prev => ({ ...prev, invoice: '', amount: '' }));
+    setInvoicesLoading(true);
     try {
       const [pendingRes, partialRes] = await Promise.all([
         invoiceApi.getAll({ studentId: student._id, status: 'pending', limit: 50 }),
@@ -67,7 +78,10 @@ const Payments = () => {
       ]);
       setStudentInvoices([...pendingRes.data.data, ...partialRes.data.data]);
     } catch (err) {
-      console.error(err);
+      toast.error('Failed to load invoices for this student');
+      setStudentInvoices([]);
+    } finally {
+      setInvoicesLoading(false);
     }
   };
 
@@ -138,8 +152,10 @@ Abubakar English School`;
 
   const resetForm = () => {
     setStudentSearch('');
+    setSearchFocused(false);
     setSelectedStudent(null);
     setStudentInvoices([]);
+    setInvoicesLoading(false);
     setSelectedInvoice(null);
     setFormData({
       invoice: '', amount: '', paymentMethod: 'cash', remarks: '',
@@ -261,6 +277,7 @@ Abubakar English School`;
       {/* Record Payment Modal */}
       <Modal isOpen={showForm} onClose={() => { setShowForm(false); resetForm(); }} title="Record Payment" size="md">
         <form onSubmit={handleSubmit} className="space-y-4">
+
           {/* Student Search */}
           <div className="relative">
             <label className="label">Search Student *</label>
@@ -269,6 +286,8 @@ Abubakar English School`;
               className="input-field"
               placeholder="Type name or admission number..."
               value={studentSearch}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
               onChange={(e) => {
                 setStudentSearch(e.target.value);
                 setSelectedStudent(null);
@@ -277,19 +296,25 @@ Abubakar English School`;
                 setFormData(prev => ({ ...prev, invoice: '', amount: '' }));
               }}
             />
-            {studentSearch && !selectedStudent && filteredStudents.length > 0 && (
-              <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                {filteredStudents.map(s => (
-                  <button
-                    key={s._id}
-                    type="button"
-                    className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm"
-                    onClick={() => handleStudentSelect(s)}
-                  >
-                    <span className="font-medium">{s.firstName} {s.lastName}</span>
-                    <span className="text-gray-400 ml-2 text-xs">Class {s.class} · {s.admissionNumber}</span>
-                  </button>
-                ))}
+            {/* Loading students */}
+            {studentsLoading && (
+              <p className="text-xs text-gray-400 mt-1">Loading students...</p>
+            )}
+            {/* Dropdown */}
+            {showDropdown && !studentsLoading && (
+              <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                {filteredStudents.length === 0 ? (
+                  <p className="px-3 py-2 text-sm text-gray-400">No students found.</p>
+                ) : (
+                  filteredStudents.map(s => (
+                    <button key={s._id} type="button"
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm"
+                      onMouseDown={() => handleStudentSelect(s)}>
+                      <span className="font-medium">{s.firstName} {s.lastName}</span>
+                      <span className="text-gray-400 ml-2 text-xs">Class {s.class} · {s.admissionNumber}</span>
+                    </button>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -298,14 +323,20 @@ Abubakar English School`;
           {selectedStudent && (
             <div>
               <label className="label">Select Invoice *</label>
-              {studentInvoices.length === 0 ? (
-                <p className="text-sm text-gray-400 py-2">No pending invoices for this student.</p>
+              {invoicesLoading ? (
+                <p className="text-sm text-gray-400 py-2">Loading invoices...</p>
+              ) : studentInvoices.length === 0 ? (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
+                  No pending or partially paid invoices for this student.
+                </div>
               ) : (
-                <select className="input-field" required value={formData.invoice} onChange={(e) => handleInvoiceSelect(e.target.value)}>
-                  <option value="">Select pending invoice</option>
+                <select className="input-field" required value={formData.invoice}
+                  onChange={(e) => handleInvoiceSelect(e.target.value)}>
+                  <option value="">Select invoice</option>
                   {studentInvoices.map(inv => (
                     <option key={inv._id} value={inv._id}>
-                      {inv.invoiceNumber} — {formatCurrency(inv.total)} (Due: {formatDate(inv.dueDate)})
+                      {inv.invoiceNumber} — Total: {formatCurrency(inv.total)}
+                      {inv.status === 'partially_paid' ? ' (Partial)' : ''} · Due: {formatDate(inv.dueDate)}
                     </option>
                   ))}
                 </select>
@@ -313,53 +344,64 @@ Abubakar English School`;
             </div>
           )}
 
+          {/* Selected invoice details */}
           {selectedInvoice && (
             <div className="p-3 bg-blue-50 rounded-lg text-sm space-y-1">
               <p><strong>Invoice:</strong> {selectedInvoice.invoiceNumber}</p>
               <p><strong>Total:</strong> {formatCurrency(selectedInvoice.total)}</p>
-              <p><strong>Amount Due:</strong> {formatCurrency(selectedInvoice.amountDue)}</p>
+              <p><strong>Amount Paid:</strong> {formatCurrency(selectedInvoice.amountPaid ?? 0)}</p>
+              <p className="text-primary-700 font-semibold"><strong>Amount Due:</strong> {formatCurrency(selectedInvoice.amountDue)}</p>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Amount (INR) *</label>
-              <input type="number" className="input-field" required min="1" value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Payment Method *</label>
-              <select className="input-field" value={formData.paymentMethod}
-                onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="online">Online</option>
-                <option value="bank_transfer">Bank Transfer</option>
-                <option value="cheque">Cheque</option>
-              </select>
-            </div>
-          </div>
+          {/* Payment fields — only show once an invoice is selected */}
+          {selectedInvoice && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Amount (INR) *</label>
+                  <input type="number" className="input-field" required min="1" value={formData.amount}
+                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Payment Method *</label>
+                  <select className="input-field" value={formData.paymentMethod}
+                    onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}>
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="online">Online</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cheque">Cheque</option>
+                  </select>
+                </div>
+              </div>
 
-          <div>
-            <label className="label">Transaction Date</label>
-            <input type="date" className="input-field" value={formData.transactionDate}
-              onChange={(e) => setFormData({ ...formData, transactionDate: e.target.value })} />
-          </div>
+              <div>
+                <label className="label">Transaction Date</label>
+                <input type="date" className="input-field" value={formData.transactionDate}
+                  onChange={(e) => setFormData({ ...formData, transactionDate: e.target.value })} />
+              </div>
 
-          <div>
-            <label className="label">Remarks</label>
-            <textarea className="input-field" rows="2" value={formData.remarks}
-              onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} />
-          </div>
+              <div>
+                <label className="label">Remarks</label>
+                <textarea className="input-field" rows="2" value={formData.remarks}
+                  onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} />
+              </div>
 
-          <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-sm text-green-700">
-            <FaWhatsapp className="h-4 w-4" />
-            <span>WhatsApp receipt will be sent to parent after recording.</span>
-          </div>
+              <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-sm text-green-700">
+                <FaWhatsapp className="h-4 w-4" />
+                <span>WhatsApp receipt will be sent to parent after recording.</span>
+              </div>
+            </>
+          )}
 
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => { setShowForm(false); resetForm(); }} className="btn-secondary">Cancel</button>
-            <button type="submit" disabled={!selectedStudent || !formData.invoice} className="btn-primary disabled:opacity-50">Record Payment</button>
+            <button type="submit"
+              disabled={!selectedStudent || !formData.invoice || !selectedInvoice}
+              className="btn-primary disabled:opacity-50">
+              Record Payment
+            </button>
           </div>
         </form>
       </Modal>

@@ -7,5 +7,6 @@ export const studentApi = {
   update: (id, data) => axiosInstance.put(`/students/${id}`, data),
   delete: (id) => axiosInstance.delete(`/students/${id}`),
   getByParent: (parentId) => axiosInstance.get(`/students/parent/${parentId}`),
-  getByClass: (className) => axiosInstance.get(`/students/class/${className}`),
+  getByClass: (className) => axiosInstance.get(`/students/class/${encodeURIComponent(className)}`),
+  promote: (data) => axiosInstance.post('/students/promote', data),
 };

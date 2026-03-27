@@ -1,7 +1,7 @@
 import express from 'express';
 import {
   getStudents, getStudentById, createStudent, updateStudent,
-  deleteStudent, getStudentsByParent, getStudentsByClass,
+  deleteStudent, getStudentsByParent, getStudentsByClass, promoteStudents,
 } from '../controllers/studentController.js';
 import { protect, authorize } from '../middleware/auth.js';
 
@@ -15,6 +15,7 @@ router.route('/')
 
 router.get('/parent/:parentId', getStudentsByParent);
 router.get('/class/:class', authorize('admin'), getStudentsByClass);
+router.post('/promote', authorize('admin'), promoteStudents);
 
 router.route('/:id')
   .get(getStudentById)
