@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { HiOutlinePlus, HiOutlineSearch, HiOutlinePencil, HiOutlineTrash, HiOutlineEye } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineSearch, HiOutlinePencil, HiOutlineTrash, HiOutlineEye, HiOutlineArrowUp } from 'react-icons/hi';
 import { useNavigate } from 'react-router-dom';
+
+const CLASS_ORDER = ['Jr. KG', 'Sr. KG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 import { toast } from 'react-toastify';
 import { fetchStudents } from '../store/slices/studentSlice';
 import { studentApi } from '../api/studentApi';
@@ -25,6 +27,11 @@ const Students = () => {
     firstName: '', lastName: '', email: '', password: '', phone: '',
   });
   const [creatingParent, setCreatingParent] = useState(false);
+  const [showPromote, setShowPromote] = useState(false);
+  const [promoting, setPromoting] = useState(false);
+  const [promotePreviewCount, setPromotePreviewCount] = useState(null);
+  const [promoteLoadingPreview, setPromoteLoadingPreview] = useState(false);
+  const [promoteData, setPromoteData] = useState({ fromClass: '', newAcademicYear: '', resetRollNumber: false });
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', dateOfBirth: '', gender: 'male',
     admissionNumber: '', admissionDate: new Date().toISOString().split('T')[0],
@@ -103,6 +110,46 @@ const Students = () => {
     }
   };
 
+  const promoteToClass = promoteData.fromClass
+    ? CLASS_ORDER[CLASS_ORDER.indexOf(promoteData.fromClass) + 1] ?? 'GRADUATED'
+    : '';
+
+  const handlePromoteFromClassChange = async (value) => {
+    setPromoteData(prev => ({ ...prev, fromClass: value }));
+    setPromotePreviewCount(null);
+    if (!value) return;
+    setPromoteLoadingPreview(true);
+    try {
+      const res = await studentApi.getByClass(value);
+      setPromotePreviewCount(res.data.data.length);
+    } catch {
+      setPromotePreviewCount(null);
+    } finally {
+      setPromoteLoadingPreview(false);
+    }
+  };
+
+  const handlePromoteSubmit = async () => {
+    if (!promoteData.fromClass) return;
+    setPromoting(true);
+    try {
+      const res = await studentApi.promote({
+        fromClass: promoteData.fromClass,
+        newAcademicYear: promoteData.newAcademicYear || undefined,
+        resetRollNumber: promoteData.resetRollNumber,
+      });
+      toast.success(res.data.message);
+      setShowPromote(false);
+      setPromoteData({ fromClass: '', newAcademicYear: '', resetRollNumber: false });
+      setPromotePreviewCount(null);
+      dispatch(fetchStudents({ page, limit: 10, search, class: classFilter }));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Promotion failed');
+    } finally {
+      setPromoting(false);
+    }
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this student?')) return;
     try {
@@ -121,9 +168,14 @@ const Students = () => {
           <h1 className="text-2xl font-bold text-gray-900">Students</h1>
           <p className="text-gray-500">Manage student records ({pagination.total} total)</p>
         </div>
-        <button onClick={() => handleOpenForm()} className="btn-primary flex items-center gap-2">
-          <HiOutlinePlus className="h-5 w-5" /> Add Student
-        </button>
+        <div className="flex gap-3">
+          <button onClick={() => setShowPromote(true)} className="btn-secondary flex items-center gap-2">
+            <HiOutlineArrowUp className="h-5 w-5" /> Promote Class
+          </button>
+          <button onClick={() => handleOpenForm()} className="btn-primary flex items-center gap-2">
+            <HiOutlinePlus className="h-5 w-5" /> Add Student
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -141,11 +193,9 @@ const Students = () => {
           className="input-field w-full sm:w-40"
         >
           <option value="">All Classes</option>
-          <option value="Jr. KG">Jr. KG</option>
-          <option value="Sr. KG">Sr. KG</option>
-          <option value="1">Class 1</option>
-          <option value="2">Class 2</option>
-          <option value="3">Class 3</option>
+          {CLASS_ORDER.map(c => (
+            <option key={c} value={c}>{c.startsWith('Jr') || c.startsWith('Sr') ? c : `Class ${c}`}</option>
+          ))}
         </select>
       </div>
 
@@ -226,6 +276,60 @@ const Students = () => {
         </div>
       )}
 
+      {/* Promote Class Modal */}
+      <Modal isOpen={showPromote} onClose={() => { setShowPromote(false); setPromoteData({ fromClass: '', newAcademicYear: '', resetRollNumber: false }); setPromotePreviewCount(null); }}
+        title="Promote Students to Next Class" size="sm">
+        <div className="space-y-4">
+          <div>
+            <label className="label">Select Class to Promote *</label>
+            <select className="input-field" value={promoteData.fromClass} onChange={(e) => handlePromoteFromClassChange(e.target.value)}>
+              <option value="">Select Class</option>
+              {CLASS_ORDER.map(c => <option key={c} value={c}>{c.startsWith('Jr') || c.startsWith('Sr') ? c : `Class ${c}`}</option>)}
+            </select>
+          </div>
+
+          {promoteData.fromClass && (
+            <div className={`rounded-lg p-3 text-sm ${promoteLoadingPreview ? 'bg-gray-50 text-gray-500' : promotePreviewCount === 0 ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+              {promoteLoadingPreview ? (
+                'Loading preview...'
+              ) : promotePreviewCount === 0 ? (
+                `No active students found in ${promoteData.fromClass === 'Jr. KG' || promoteData.fromClass === 'Sr. KG' ? promoteData.fromClass : `Class ${promoteData.fromClass}`}.`
+              ) : promoteToClass === 'GRADUATED' ? (
+                <><strong>{promotePreviewCount}</strong> active students in Class {promoteData.fromClass} will be marked as <strong>Graduated</strong>.</>
+              ) : (
+                <><strong>{promotePreviewCount}</strong> active students will be promoted from <strong>{promoteData.fromClass.startsWith('Jr') || promoteData.fromClass.startsWith('Sr') ? promoteData.fromClass : `Class ${promoteData.fromClass}`}</strong> to <strong>{promoteToClass.startsWith('Jr') || promoteToClass.startsWith('Sr') ? promoteToClass : `Class ${promoteToClass}`}</strong>.</>
+              )}
+            </div>
+          )}
+
+          {promoteData.fromClass && promotePreviewCount > 0 && (
+            <>
+              <div>
+                <label className="label">New Academic Year (optional)</label>
+                <input type="text" className="input-field" placeholder="e.g. 2025-2026"
+                  value={promoteData.newAcademicYear}
+                  onChange={(e) => setPromoteData(prev => ({ ...prev, newAcademicYear: e.target.value }))} />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={promoteData.resetRollNumber}
+                  onChange={(e) => setPromoteData(prev => ({ ...prev, resetRollNumber: e.target.checked }))} />
+                <span className="text-sm text-gray-700">Clear roll numbers (assign new ones in new class)</span>
+              </label>
+            </>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => { setShowPromote(false); setPromoteData({ fromClass: '', newAcademicYear: '', resetRollNumber: false }); setPromotePreviewCount(null); }}
+              className="btn-secondary">Cancel</button>
+            <button type="button" onClick={handlePromoteSubmit}
+              disabled={!promoteData.fromClass || promotePreviewCount === 0 || promotePreviewCount === null || promoting || promoteLoadingPreview}
+              className="btn-primary disabled:opacity-50">
+              {promoting ? 'Promoting...' : 'Confirm & Promote'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Add/Edit Modal */}
       <Modal isOpen={showForm} onClose={() => { setShowForm(false); resetForm(); }}
         title={editingStudent ? 'Edit Student' : 'Add New Student'} size="lg">
@@ -269,11 +373,7 @@ const Students = () => {
               <select className="input-field" required value={formData.class}
                 onChange={(e) => setFormData({ ...formData, class: e.target.value })}>
                 <option value="">Select Class</option>
-                <option value="Jr. KG">Jr. KG</option>
-                <option value="Sr. KG">Sr. KG</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
+                {CLASS_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
