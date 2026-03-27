@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { HiOutlinePlus } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineDownload } from 'react-icons/hi';
+import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
-import { fetchPayments, fetchInvoices } from '../store/slices/feeSlice';
+import { fetchPayments } from '../store/slices/feeSlice';
 import { paymentApi, invoiceApi } from '../api/feeApi';
+import { studentApi } from '../api/studentApi';
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
 import { formatDate, formatCurrency, getStatusColor } from '../utils/formatters';
@@ -15,7 +17,10 @@ const Payments = () => {
   const isAdmin = user?.role === 'admin';
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
-  const [pendingInvoices, setPendingInvoices] = useState([]);
+  const [allStudents, setAllStudents] = useState([]);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentInvoices, setStudentInvoices] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [formData, setFormData] = useState({
     invoice: '', amount: '', paymentMethod: 'cash', remarks: '',
@@ -26,19 +31,44 @@ const Payments = () => {
     dispatch(fetchPayments({ page, limit: 10 }));
   }, [dispatch, page]);
 
-  const loadPendingInvoices = async () => {
+  const loadStudents = async () => {
     try {
-      const res = await invoiceApi.getAll({ status: 'pending', limit: 100 });
-      const partialRes = await invoiceApi.getAll({ status: 'partially_paid', limit: 100 });
-      setPendingInvoices([...res.data.data, ...partialRes.data.data]);
+      const res = await studentApi.getAll({ limit: 200, status: 'active' });
+      setAllStudents(res.data.data || []);
     } catch (err) {
       console.error(err);
     }
   };
 
   const handleOpenForm = () => {
-    loadPendingInvoices();
+    loadStudents();
     setShowForm(true);
+  };
+
+  const filteredStudents = useMemo(() => {
+    if (!studentSearch.trim()) return allStudents.slice(0, 20);
+    const q = studentSearch.toLowerCase();
+    return allStudents.filter(s =>
+      `${s.firstName} ${s.lastName}`.toLowerCase().includes(q) ||
+      s.admissionNumber?.toLowerCase().includes(q) ||
+      s.class?.toLowerCase().includes(q)
+    ).slice(0, 20);
+  }, [studentSearch, allStudents]);
+
+  const handleStudentSelect = async (student) => {
+    setSelectedStudent(student);
+    setStudentSearch(`${student.firstName} ${student.lastName}`);
+    setSelectedInvoice(null);
+    setFormData(prev => ({ ...prev, invoice: '', amount: '' }));
+    try {
+      const [pendingRes, partialRes] = await Promise.all([
+        invoiceApi.getAll({ studentId: student._id, status: 'pending', limit: 50 }),
+        invoiceApi.getAll({ studentId: student._id, status: 'partially_paid', limit: 50 }),
+      ]);
+      setStudentInvoices([...pendingRes.data.data, ...partialRes.data.data]);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleInvoiceSelect = async (invoiceId) => {
@@ -56,23 +86,103 @@ const Payments = () => {
     }
   };
 
+  const handleWhatsAppNotify = (payment, invoice) => {
+    const phone = invoice?.parent?.phone;
+    if (!phone) {
+      toast.warn('Parent phone not set — WhatsApp receipt not sent');
+      return;
+    }
+    let cleanPhone = phone.replace(/[^0-9]/g, '');
+    if (!cleanPhone.startsWith('91')) cleanPhone = '91' + cleanPhone;
+    const student = invoice?.student;
+    const message = `*Abubakar English School - Payment Receipt*
+
+*Receipt #:* ${payment.receiptNumber}
+*Student:* ${student?.firstName} ${student?.lastName} (Class ${student?.class || ''})
+*Amount Paid:* ${formatCurrency(payment.amount)}
+*Payment Method:* ${payment.paymentMethod?.replace('_', ' ')}
+*Date:* ${formatDate(payment.transactionDate)}
+*Invoice #:* ${invoice?.invoiceNumber}
+*Status:* ${invoice?.status?.replace('_', ' ')}
+
+Thank you for your payment,
+Abubakar English School`;
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await paymentApi.create({
+      const res = await paymentApi.create({
         ...formData,
         amount: parseFloat(formData.amount),
       });
+      const newPayment = res.data.data;
       toast.success('Payment recorded successfully');
+
+      // Fetch full invoice details for WhatsApp
+      if (selectedInvoice) {
+        try {
+          const invRes = await invoiceApi.getById(selectedInvoice._id);
+          handleWhatsAppNotify(newPayment, invRes.data.data);
+        } catch (_) {}
+      }
+
       setShowForm(false);
-      setSelectedInvoice(null);
-      setFormData({
-        invoice: '', amount: '', paymentMethod: 'cash', remarks: '',
-        transactionDate: new Date().toISOString().split('T')[0],
-      });
+      resetForm();
       dispatch(fetchPayments({ page, limit: 10 }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to record payment');
+    }
+  };
+
+  const resetForm = () => {
+    setStudentSearch('');
+    setSelectedStudent(null);
+    setStudentInvoices([]);
+    setSelectedInvoice(null);
+    setFormData({
+      invoice: '', amount: '', paymentMethod: 'cash', remarks: '',
+      transactionDate: new Date().toISOString().split('T')[0],
+    });
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      toast.info('Preparing export...');
+      const res = await paymentApi.getAll({ limit: 10000 });
+      const allPayments = res.data.data;
+      if (!allPayments.length) {
+        toast.info('No payments to export');
+        return;
+      }
+      const headers = ['Receipt #', 'Student', 'Class', 'Invoice #', 'Amount', 'Method', 'Date', 'Status', 'Remarks'];
+      const rows = allPayments.map(p => [
+        p.receiptNumber,
+        `${p.student?.firstName || ''} ${p.student?.lastName || ''}`.trim(),
+        p.student?.class || '',
+        p.invoice?.invoiceNumber || '',
+        p.amount,
+        p.paymentMethod?.replace('_', ' ') || '',
+        formatDate(p.transactionDate),
+        p.status,
+        p.remarks || '',
+      ]);
+
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `payments_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${allPayments.length} payments`);
+    } catch (err) {
+      toast.error('Export failed');
     }
   };
 
@@ -83,11 +193,16 @@ const Payments = () => {
           <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
           <p className="text-gray-500">View and record payments ({paymentPagination.total} total)</p>
         </div>
-        {isAdmin && (
-          <button onClick={handleOpenForm} className="btn-primary flex items-center gap-2">
-            <HiOutlinePlus className="h-5 w-5" /> Record Payment
+        <div className="flex gap-2">
+          <button onClick={handleExportExcel} className="btn-secondary flex items-center gap-2">
+            <HiOutlineDownload className="h-5 w-5" /> Export
           </button>
-        )}
+          {isAdmin && (
+            <button onClick={handleOpenForm} className="btn-primary flex items-center gap-2">
+              <HiOutlinePlus className="h-5 w-5" /> Record Payment
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? <Loader /> : (
@@ -144,22 +259,62 @@ const Payments = () => {
       )}
 
       {/* Record Payment Modal */}
-      <Modal isOpen={showForm} onClose={() => { setShowForm(false); setSelectedInvoice(null); }} title="Record Payment" size="md">
+      <Modal isOpen={showForm} onClose={() => { setShowForm(false); resetForm(); }} title="Record Payment" size="md">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="label">Select Invoice *</label>
-            <select className="input-field" required value={formData.invoice} onChange={(e) => handleInvoiceSelect(e.target.value)}>
-              <option value="">Select pending invoice</option>
-              {pendingInvoices.map(inv => (
-                <option key={inv._id} value={inv._id}>
-                  {inv.invoiceNumber} - {inv.student?.firstName} {inv.student?.lastName} ({formatCurrency(inv.total)})
-                </option>
-              ))}
-            </select>
+          {/* Student Search */}
+          <div className="relative">
+            <label className="label">Search Student *</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Type name or admission number..."
+              value={studentSearch}
+              onChange={(e) => {
+                setStudentSearch(e.target.value);
+                setSelectedStudent(null);
+                setStudentInvoices([]);
+                setSelectedInvoice(null);
+                setFormData(prev => ({ ...prev, invoice: '', amount: '' }));
+              }}
+            />
+            {studentSearch && !selectedStudent && filteredStudents.length > 0 && (
+              <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                {filteredStudents.map(s => (
+                  <button
+                    key={s._id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm"
+                    onClick={() => handleStudentSelect(s)}
+                  >
+                    <span className="font-medium">{s.firstName} {s.lastName}</span>
+                    <span className="text-gray-400 ml-2 text-xs">Class {s.class} · {s.admissionNumber}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
+          {/* Invoice Selection — shown after student selected */}
+          {selectedStudent && (
+            <div>
+              <label className="label">Select Invoice *</label>
+              {studentInvoices.length === 0 ? (
+                <p className="text-sm text-gray-400 py-2">No pending invoices for this student.</p>
+              ) : (
+                <select className="input-field" required value={formData.invoice} onChange={(e) => handleInvoiceSelect(e.target.value)}>
+                  <option value="">Select pending invoice</option>
+                  {studentInvoices.map(inv => (
+                    <option key={inv._id} value={inv._id}>
+                      {inv.invoiceNumber} — {formatCurrency(inv.total)} (Due: {formatDate(inv.dueDate)})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
           {selectedInvoice && (
-            <div className="p-3 bg-blue-50 rounded-lg text-sm">
+            <div className="p-3 bg-blue-50 rounded-lg text-sm space-y-1">
               <p><strong>Invoice:</strong> {selectedInvoice.invoiceNumber}</p>
               <p><strong>Total:</strong> {formatCurrency(selectedInvoice.total)}</p>
               <p><strong>Amount Due:</strong> {formatCurrency(selectedInvoice.amountDue)}</p>
@@ -197,9 +352,14 @@ const Payments = () => {
               onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} />
           </div>
 
+          <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-sm text-green-700">
+            <FaWhatsapp className="h-4 w-4" />
+            <span>WhatsApp receipt will be sent to parent after recording.</span>
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button type="button" onClick={() => { setShowForm(false); setSelectedInvoice(null); }} className="btn-secondary">Cancel</button>
-            <button type="submit" className="btn-primary">Record Payment</button>
+            <button type="button" onClick={() => { setShowForm(false); resetForm(); }} className="btn-secondary">Cancel</button>
+            <button type="submit" disabled={!selectedStudent || !formData.invoice} className="btn-primary disabled:opacity-50">Record Payment</button>
           </div>
         </form>
       </Modal>

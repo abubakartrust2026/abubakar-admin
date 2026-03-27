@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { HiOutlinePlus, HiOutlineEye, HiOutlineTrash } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineEye, HiOutlineTrash, HiOutlineCalendar } from 'react-icons/hi';
 import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { fetchInvoices, fetchFees } from '../store/slices/feeSlice';
@@ -22,6 +22,17 @@ const Invoices = () => {
   const [selectedClass, setSelectedClass] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [viewInvoice, setViewInvoice] = useState(null);
+  const [showBulkForm, setShowBulkForm] = useState(false);
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const defaultBulkData = {
+    student: '', parent: '', selectedClass: '',
+    items: [{ fee: '', description: '', amount: 0 }],
+    startMonth: `${new Date().getFullYear()}-01`,
+    dueDayOfMonth: 10,
+    academicYear: '2025-2026',
+    tax: 0, discount: 0,
+  };
+  const [bulkData, setBulkData] = useState(defaultBulkData);
   const [formData, setFormData] = useState({
     student: '', parent: '', items: [{ fee: '', description: '', amount: 0 }],
     dueDate: '', academicYear: '2025-2026', term: '', tax: 0, discount: 0,
@@ -39,6 +50,73 @@ const Invoices = () => {
   }, [isAdmin]);
 
   const classes = Array.from(new Set(students.map(s => s.class).filter(Boolean))).sort();
+
+  const handleBulkStudentSelect = (studentId) => {
+    const student = students.find(s => s._id === studentId);
+    setBulkData(prev => ({
+      ...prev,
+      student: studentId,
+      parent: student?.parent?._id || student?.parent || '',
+    }));
+  };
+
+  const handleBulkItemChange = (idx, field, value) => {
+    setBulkData(prev => {
+      const items = [...prev.items];
+      items[idx] = { ...items[idx], [field]: value };
+      if (field === 'fee' && value) {
+        const fee = fees.find(f => f._id === value);
+        if (fee) {
+          items[idx].description = fee.name;
+          items[idx].amount = fee.amount;
+        }
+      }
+      return { ...prev, items };
+    });
+  };
+
+  const handleBulkGenerate = async (e) => {
+    e.preventDefault();
+    if (!bulkData.student) { toast.error('Please select a student'); return; }
+    if (!bulkData.items[0].description) { toast.error('Please add at least one fee item'); return; }
+    setBulkGenerating(true);
+    try {
+      const [startYear, startMonthNum] = bulkData.startMonth.split('-').map(Number);
+      const promises = [];
+      for (let i = 0; i < 12; i++) {
+        const monthDate = new Date(startYear, startMonthNum - 1 + i, 1);
+        const dueDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), parseInt(bulkData.dueDayOfMonth));
+        const monthName = monthDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const items = bulkData.items
+          .filter(item => item.description)
+          .map(item => ({ ...item, amount: parseFloat(item.amount), description: `${item.description} - ${monthName}` }));
+        const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
+        const tax = parseFloat(bulkData.tax) || 0;
+        const discount = parseFloat(bulkData.discount) || 0;
+        promises.push(invoiceApi.create({
+          student: bulkData.student,
+          parent: bulkData.parent,
+          items,
+          dueDate: dueDate.toISOString().split('T')[0],
+          academicYear: bulkData.academicYear,
+          term: monthName,
+          tax,
+          discount,
+          subtotal,
+          total: subtotal + tax - discount,
+        }));
+      }
+      await Promise.all(promises);
+      toast.success('12 monthly invoices created successfully');
+      setShowBulkForm(false);
+      setBulkData(defaultBulkData);
+      dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined }));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to generate invoices');
+    } finally {
+      setBulkGenerating(false);
+    }
+  };
 
   const handleAddItem = () => {
     setFormData(prev => ({
@@ -161,9 +239,14 @@ Abubakar English School`;
           <p className="text-gray-500">Manage student invoices ({invoicePagination.total} total)</p>
         </div>
         {isAdmin && (
-          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
-            <HiOutlinePlus className="h-5 w-5" /> Create Invoice
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowBulkForm(true)} className="btn-secondary flex items-center gap-2">
+              <HiOutlineCalendar className="h-5 w-5" /> Generate x12 Monthly
+            </button>
+            <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
+              <HiOutlinePlus className="h-5 w-5" /> Create Invoice
+            </button>
+          </div>
         )}
       </div>
 
@@ -284,6 +367,89 @@ Abubakar English School`;
             </table>
           </div>
         )}
+      </Modal>
+
+      {/* Generate 12 Monthly Invoices Modal */}
+      <Modal isOpen={showBulkForm} onClose={() => { setShowBulkForm(false); setBulkData(defaultBulkData); }} title="Generate 12 Monthly Invoices" size="lg">
+        <form onSubmit={handleBulkGenerate} className="space-y-4">
+          <p className="text-sm text-gray-500">Creates one invoice per month for 12 consecutive months for the selected student.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Class</label>
+              <select className="input-field" value={bulkData.selectedClass}
+                onChange={(e) => setBulkData(prev => ({ ...prev, selectedClass: e.target.value, student: '' }))}>
+                <option value="">All Classes</option>
+                {classes.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Student *</label>
+              <select className="input-field" required value={bulkData.student} onChange={(e) => handleBulkStudentSelect(e.target.value)}>
+                <option value="">Select Student</option>
+                {students
+                  .filter(s => !bulkData.selectedClass || s.class === bulkData.selectedClass)
+                  .map(s => (
+                    <option key={s._id} value={s._id}>{s.firstName} {s.lastName} (Class {s.class})</option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Start Month *</label>
+              <input type="month" className="input-field" required value={bulkData.startMonth}
+                onChange={(e) => setBulkData(prev => ({ ...prev, startMonth: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label">Due Day of Month</label>
+              <input type="number" className="input-field" min="1" max="28" value={bulkData.dueDayOfMonth}
+                onChange={(e) => setBulkData(prev => ({ ...prev, dueDayOfMonth: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label className="label">Fee Items</label>
+            {bulkData.items.map((item, idx) => (
+              <div key={idx} className="flex gap-2 mb-2">
+                <select className="input-field w-64" value={item.fee}
+                  onChange={(e) => handleBulkItemChange(idx, 'fee', e.target.value)}>
+                  <option value="">Select Fee</option>
+                  {fees.map(f => <option key={f._id} value={f._id}>{f.name} ({formatCurrency(f.amount)})</option>)}
+                </select>
+                <input type="text" className="input-field flex-1" value={item.description}
+                  onChange={(e) => handleBulkItemChange(idx, 'description', e.target.value)} placeholder="Description" />
+                <input type="number" className="input-field w-32" min="0" value={item.amount}
+                  onChange={(e) => handleBulkItemChange(idx, 'amount', e.target.value)} placeholder="Amount" />
+                {bulkData.items.length > 1 && (
+                  <button type="button" onClick={() => setBulkData(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }))}
+                    className="text-red-500 px-2">X</button>
+                )}
+              </div>
+            ))}
+            <button type="button"
+              onClick={() => setBulkData(prev => ({ ...prev, items: [...prev.items, { fee: '', description: '', amount: 0 }] }))}
+              className="text-sm text-primary-600 hover:underline">+ Add Item</button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Tax (per invoice)</label>
+              <input type="number" className="input-field" min="0" value={bulkData.tax}
+                onChange={(e) => setBulkData(prev => ({ ...prev, tax: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label">Discount (per invoice)</label>
+              <input type="number" className="input-field" min="0" value={bulkData.discount}
+                onChange={(e) => setBulkData(prev => ({ ...prev, discount: e.target.value }))} />
+            </div>
+          </div>
+          <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+            This will create <strong>12 invoices</strong> — one per month starting from the selected month.
+            Each invoice description will include the month name.
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => { setShowBulkForm(false); setBulkData(defaultBulkData); }} className="btn-secondary">Cancel</button>
+            <button type="submit" disabled={bulkGenerating} className="btn-primary disabled:opacity-50">
+              {bulkGenerating ? 'Generating...' : 'Generate 12 Invoices'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       {/* Create Invoice Modal */}

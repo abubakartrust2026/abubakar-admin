@@ -10,6 +10,7 @@ import Fees from './pages/Fees';
 import Invoices from './pages/Invoices';
 import Payments from './pages/Payments';
 import Reports from './pages/Reports';
+import Inventory from './pages/Inventory';
 import NotFound from './pages/NotFound';
 
 // Layouts & Auth
@@ -43,6 +44,7 @@ function App() {
         <Route path="invoices" element={<Invoices />} />
         <Route path="payments" element={<Payments />} />
         <Route path="reports" element={<RoleBasedRoute allowedRoles={['admin']}><Reports /></RoleBasedRoute>} />
+        <Route path="inventory" element={<RoleBasedRoute allowedRoles={['admin']}><Inventory /></RoleBasedRoute>} />
       </Route>
 
       {/* 404 Route */}

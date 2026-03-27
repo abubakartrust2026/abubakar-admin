@@ -8,6 +8,7 @@ import {
   HiOutlineDocumentText,
   HiOutlineCreditCard,
   HiOutlineChartBar,
+  HiOutlineArchive,
 } from 'react-icons/hi';
 
 const Sidebar = () => {
@@ -22,6 +23,7 @@ const Sidebar = () => {
     { to: '/invoices', icon: HiOutlineDocumentText, label: 'Invoices' },
     { to: '/payments', icon: HiOutlineCreditCard, label: 'Payments' },
     { to: '/reports', icon: HiOutlineChartBar, label: 'Reports' },
+    { to: '/inventory', icon: HiOutlineArchive, label: 'Inventory' },
   ];
 
   const parentLinks = [
