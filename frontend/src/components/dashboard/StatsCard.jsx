@@ -1,4 +1,6 @@
-const StatsCard = ({ title, value, icon: Icon, color = 'primary', subtitle }) => {
+import { Link } from 'react-router-dom';
+
+const StatsCard = ({ title, value, icon: Icon, color = 'primary', subtitle, href }) => {
   const colors = {
     primary: 'bg-primary-50 text-primary-600',
     green: 'bg-green-50 text-green-600',
@@ -8,8 +10,8 @@ const StatsCard = ({ title, value, icon: Icon, color = 'primary', subtitle }) =>
     purple: 'bg-purple-50 text-purple-600',
   };
 
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+  const cardContent = (
+    <div className={`bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow ${href ? 'cursor-pointer hover:shadow-lg' : ''}`}>
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>
@@ -24,6 +26,12 @@ const StatsCard = ({ title, value, icon: Icon, color = 'primary', subtitle }) =>
       </div>
     </div>
   );
+
+  if (href) {
+    return <Link to={href} className="no-underline">{cardContent}</Link>;
+  }
+
+  return cardContent;
 };
 
 export default StatsCard;

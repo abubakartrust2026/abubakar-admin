@@ -53,6 +53,7 @@ const ParentDashboard = () => {
                 value={`Class ${student.class}`}
                 icon={HiOutlineAcademicCap}
                 color="blue"
+                href="/invoices"
               />
               <StatsCard
                 title="Attendance (30 days)"
@@ -60,6 +61,7 @@ const ParentDashboard = () => {
                 icon={HiOutlineClipboardCheck}
                 color="green"
                 subtitle={`${attendance.presentDays}/${attendance.totalDays} days present`}
+                href="/attendance"
               />
               <StatsCard
                 title="Pending Fees"
@@ -67,6 +69,7 @@ const ParentDashboard = () => {
                 icon={HiOutlineCurrencyRupee}
                 color={fees.totalDue > 0 ? 'red' : 'green'}
                 subtitle={`${fees.pendingInvoices} invoice(s) pending`}
+                href="/invoices"
               />
             </div>
 

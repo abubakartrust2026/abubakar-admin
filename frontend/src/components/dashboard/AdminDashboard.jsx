@@ -71,22 +71,24 @@ const AdminDashboard = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <StatsCard title="Total Students" value={stats.totalStudents} icon={HiOutlineUserGroup} color="blue" />
-        <StatsCard title="Total Parents" value={stats.totalParents} icon={HiOutlineUsers} color="primary" />
+        <StatsCard title="Total Students" value={stats.totalStudents} icon={HiOutlineUserGroup} color="blue" href="/students" />
+        <StatsCard title="Total Parents" value={stats.totalParents} icon={HiOutlineUsers} color="primary" href="/students" />
         <StatsCard
           title="Attendance Today"
           value={`${stats.attendanceRate}%`}
           icon={HiOutlineClipboardCheck}
           color="green"
           subtitle={`${stats.presentToday}/${stats.totalAttendanceToday} present`}
+          href="/attendance"
         />
-        <StatsCard title="Total Revenue" value={formatCurrency(stats.totalRevenue)} icon={HiOutlineCurrencyRupee} color="purple" />
+        <StatsCard title="Total Revenue" value={formatCurrency(stats.totalRevenue)} icon={HiOutlineCurrencyRupee} color="purple" href="/payments" />
         <StatsCard
           title="Pending Invoices"
           value={stats.pendingInvoices}
           icon={HiOutlineExclamation}
           color="yellow"
           subtitle={`${stats.overdueInvoices} overdue`}
+          href="/invoices"
         />
       </div>
 
