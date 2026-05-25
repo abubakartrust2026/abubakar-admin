@@ -1,9 +1,10 @@
 import { useSelector } from 'react-redux';
 import AdminDashboard from '../components/dashboard/AdminDashboard';
 import ParentDashboard from '../components/dashboard/ParentDashboard';
+import { selectUser } from '../store/slices/authSlice';
 
 const Dashboard = () => {
-  const { user } = useSelector((state) => state.auth);
+  const user = useSelector(selectUser);
 
   if (user?.role === 'admin') return <AdminDashboard />;
   if (user?.role === 'parent') return <ParentDashboard />;

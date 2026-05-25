@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   HiOutlineUserGroup, HiOutlineClipboardCheck,
-  HiOutlineCurrencyRupee, HiOutlineExclamation,
+  HiOutlineCurrencyRupee, HiOutlineExclamation, HiOutlineUsers,
 } from 'react-icons/hi';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import {
@@ -18,6 +18,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tool
 const AdminDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -25,7 +26,7 @@ const AdminDashboard = () => {
         const res = await dashboardApi.getAdminDashboard();
         setData(res.data.data);
       } catch (err) {
-        console.error('Dashboard error:', err);
+        setError('Could not load dashboard. Please refresh the page or try again.');
       } finally {
         setLoading(false);
       }
@@ -34,9 +35,10 @@ const AdminDashboard = () => {
   }, []);
 
   if (loading) return <Loader size="lg" />;
+  if (error) return <p className="text-center text-red-500 py-12">{error}</p>;
   if (!data) return <p className="text-center text-gray-500">Failed to load dashboard data.</p>;
 
-  const { stats, monthlyRevenue, recentPayments, studentsByClass, weeklyAttendance } = data;
+  const { stats, monthlyRevenue, recentPayments, studentsByClass } = data;
 
   const revenueChartData = {
     labels: monthlyRevenue.map((m) => m._id),
@@ -68,8 +70,9 @@ const AdminDashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <StatsCard title="Total Students" value={stats.totalStudents} icon={HiOutlineUserGroup} color="blue" />
+        <StatsCard title="Total Parents" value={stats.totalParents} icon={HiOutlineUsers} color="primary" />
         <StatsCard
           title="Attendance Today"
           value={`${stats.attendanceRate}%`}
@@ -92,7 +95,17 @@ const AdminDashboard = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Revenue</h3>
           {monthlyRevenue.length > 0 ? (
-            <Bar data={revenueChartData} options={{ responsive: true, plugins: { legend: { display: false } } }} />
+            <Bar data={revenueChartData} options={{
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                y: {
+                  ticks: {
+                    callback: (value) => `₹${value.toLocaleString('en-IN')}`,
+                  },
+                },
+              },
+            }} />
           ) : (
             <p className="text-gray-400 text-center py-8">No revenue data available</p>
           )}
@@ -100,7 +113,9 @@ const AdminDashboard = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Students by Class</h3>
           {studentsByClass.length > 0 ? (
-            <div className="flex justify-center"><div className="w-64"><Doughnut data={studentDistribution} /></div></div>
+            <div className="relative h-64">
+              <Doughnut data={studentDistribution} options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }} />
+            </div>
           ) : (
             <p className="text-gray-400 text-center py-8">No student data available</p>
           )}

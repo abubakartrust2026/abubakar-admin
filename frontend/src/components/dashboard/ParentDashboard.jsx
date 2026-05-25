@@ -8,6 +8,7 @@ import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatte
 const ParentDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -15,7 +16,7 @@ const ParentDashboard = () => {
         const res = await dashboardApi.getParentDashboard();
         setData(res.data.data);
       } catch (err) {
-        console.error('Dashboard error:', err);
+        setError('Could not load dashboard. Please refresh the page or try again.');
       } finally {
         setLoading(false);
       }
@@ -24,6 +25,7 @@ const ParentDashboard = () => {
   }, []);
 
   if (loading) return <Loader size="lg" />;
+  if (error) return <p className="text-center text-red-500 py-12">{error}</p>;
   if (!data) return <p className="text-center text-gray-500">Failed to load dashboard data.</p>;
 
   return (

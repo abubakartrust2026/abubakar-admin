@@ -25,7 +25,7 @@ export const getAdminDashboard = asyncHandler(async (req, res) => {
 
   const presentToday = todayAttendance.filter(a => a.status === 'present' || a.status === 'late').length;
   const attendanceRate = todayAttendance.length > 0
-    ? ((presentToday / todayAttendance.length) * 100).toFixed(1)
+    ? parseFloat(((presentToday / todayAttendance.length) * 100).toFixed(1))
     : 0;
 
   // Revenue stats
@@ -68,7 +68,7 @@ export const getAdminDashboard = asyncHandler(async (req, res) => {
   const recentPayments = await Payment.find({ status: 'completed' })
     .populate('student', 'firstName lastName class')
     .populate('parent', 'firstName lastName')
-    .sort({ createdAt: -1 })
+    .sort({ transactionDate: -1 })
     .limit(5);
 
   // Students by class
@@ -128,44 +128,47 @@ export const getParentDashboard = asyncHandler(async (req, res) => {
   const children = await Student.find({ parent: parentId, status: 'active' });
   const childIds = children.map(c => c._id);
 
-  // Attendance for each child (last 30 days)
+  // Bulk fetch attendance and invoices for all children at once
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const childrenData = await Promise.all(
-    children.map(async (child) => {
-      const attendance = await Attendance.find({
-        student: child._id,
-        date: { $gte: thirtyDaysAgo },
-      }).sort({ date: -1 });
+  const [allAttendance, allInvoices] = await Promise.all([
+    Attendance.find({ student: { $in: childIds }, date: { $gte: thirtyDaysAgo } }).sort({ date: -1 }),
+    Invoice.find({ student: { $in: childIds }, status: { $in: ['pending', 'partially_paid', 'overdue'] } }).sort({ dueDate: 1 }),
+  ]);
 
-      const totalDays = attendance.length;
-      const presentDays = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
+  const attendanceByChild = {};
+  const invoicesByChild = {};
+  for (const id of childIds) {
+    attendanceByChild[id] = [];
+    invoicesByChild[id] = [];
+  }
+  for (const a of allAttendance) attendanceByChild[a.student]?.push(a);
+  for (const inv of allInvoices) invoicesByChild[inv.student]?.push(inv);
 
-      // Pending invoices
-      const pendingInvoices = await Invoice.find({
-        student: child._id,
-        status: { $in: ['pending', 'partially_paid', 'overdue'] },
-      }).sort({ dueDate: 1 });
+  const childrenData = children.map((child) => {
+    const attendance = attendanceByChild[child._id] || [];
+    const pendingInvoices = invoicesByChild[child._id] || [];
 
-      const totalDue = pendingInvoices.reduce((sum, inv) => sum + inv.total, 0);
+    const totalDays = attendance.length;
+    const presentDays = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
+    const totalDue = pendingInvoices.reduce((sum, inv) => sum + inv.total, 0);
 
-      return {
-        student: child,
-        attendance: {
-          totalDays,
-          presentDays,
-          attendanceRate: totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(1) : 0,
-          recentRecords: attendance.slice(0, 7),
-        },
-        fees: {
-          pendingInvoices: pendingInvoices.length,
-          totalDue,
-          upcomingDue: pendingInvoices[0] || null,
-        },
-      };
-    })
-  );
+    return {
+      student: child,
+      attendance: {
+        totalDays,
+        presentDays,
+        attendanceRate: totalDays > 0 ? parseFloat(((presentDays / totalDays) * 100).toFixed(1)) : 0,
+        recentRecords: attendance.slice(0, 7),
+      },
+      fees: {
+        pendingInvoices: pendingInvoices.length,
+        totalDue,
+        upcomingDue: pendingInvoices[0] || null,
+      },
+    };
+  });
 
   // Recent payments
   const recentPayments = await Payment.find({
