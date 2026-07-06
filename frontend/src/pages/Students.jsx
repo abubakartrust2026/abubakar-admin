@@ -306,7 +306,7 @@ const Students = () => {
             <>
               <div>
                 <label className="label">New Academic Year (optional)</label>
-                <input type="text" className="input-field" placeholder="e.g. 2025-2026"
+                <input type="text" className="input-field" placeholder="e.g. 2026-2027"
                   value={promoteData.newAcademicYear}
                   onChange={(e) => setPromoteData(prev => ({ ...prev, newAcademicYear: e.target.value }))} />
               </div>
