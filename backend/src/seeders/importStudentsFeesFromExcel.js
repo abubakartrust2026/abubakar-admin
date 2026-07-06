@@ -15,7 +15,7 @@ dotenv.config();
 const DEFAULTS = {
   dateOfBirth: new Date(Date.UTC(2025, 0, 1)),
   admissionDate: new Date(Date.UTC(2025, 5, 1)),
-  academicYear: '2025-26',
+  academicYear: '2026-27',
   gender: 'female',
   dueDate: new Date(Date.UTC(2026, 4, 1)),
   paymentMethod: 'cash',
@@ -269,7 +269,7 @@ async function run() {
   const fileArg = args.find((arg) => !arg.startsWith('--'));
   const excelPath = fileArg
     ? path.resolve(process.cwd(), fileArg)
-    : path.resolve(repoRoot, '..', 'Student sheet  2025-26.xlsx');
+    : path.resolve(repoRoot, '..', 'Student sheet  2026-27.xlsx');
 
   console.log(`Using Excel: ${excelPath}`);
   console.log(`Mode: ${dryRun ? 'DRY RUN' : 'WRITE'}`);
@@ -387,7 +387,7 @@ async function run() {
     let invoice = await Invoice.findOne({
       student: existingStudent._id,
       academicYear: DEFAULTS.academicYear,
-      term: 'Excel Import 2025-26',
+      term: 'Excel Import 2026-27',
     });
 
     if (!invoice) {
@@ -407,7 +407,7 @@ async function run() {
           total: invoiceTotal,
           dueDate: DEFAULTS.dueDate,
           academicYear: DEFAULTS.academicYear,
-          term: 'Excel Import 2025-26',
+          term: 'Excel Import 2026-27',
         });
       } else {
         invoice = { _id: new mongoose.Types.ObjectId(), total: invoiceTotal, status: 'pending' };

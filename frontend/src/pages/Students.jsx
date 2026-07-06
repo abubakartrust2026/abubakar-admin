@@ -448,7 +448,6 @@ const Students = () => {
               <select className="input-field" value={formData.academicYear}
                 onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}>
                 <option value="2026-2027">2026-27</option>
-                <option value="2025-2026">2025-26</option>
               </select>
             </div>
           </div>
