@@ -9,4 +9,6 @@ export const studentApi = {
   getByParent: (parentId) => axiosInstance.get(`/students/parent/${parentId}`),
   getByClass: (className) => axiosInstance.get(`/students/class/${encodeURIComponent(className)}`),
   promote: (data) => axiosInstance.post('/students/promote', data),
+  rollbackPromotePreview: (params) => axiosInstance.get('/students/rollback-promote/preview', { params }),
+  rollbackPromote: (data) => axiosInstance.post('/students/rollback-promote', data),
 };

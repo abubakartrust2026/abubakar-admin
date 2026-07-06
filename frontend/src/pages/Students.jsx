@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { HiOutlinePlus, HiOutlineSearch, HiOutlinePencil, HiOutlineTrash, HiOutlineEye, HiOutlineArrowUp } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineSearch, HiOutlinePencil, HiOutlineTrash, HiOutlineEye, HiOutlineArrowUp, HiOutlineRefresh } from 'react-icons/hi';
 import { useNavigate } from 'react-router-dom';
 
 const CLASS_ORDER = ['Jr. KG', 'Sr. KG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
@@ -32,6 +32,11 @@ const Students = () => {
   const [promotePreviewCount, setPromotePreviewCount] = useState(null);
   const [promoteLoadingPreview, setPromoteLoadingPreview] = useState(false);
   const [promoteData, setPromoteData] = useState({ fromClass: '', newAcademicYear: '', resetRollNumber: false });
+  const [showRollback, setShowRollback] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
+  const [rollbackPreviewCount, setRollbackPreviewCount] = useState(null);
+  const [rollbackLoadingPreview, setRollbackLoadingPreview] = useState(false);
+  const [rollbackData, setRollbackData] = useState({ fromClass: '1', toClass: 'Sr. KG', updatedAfter: '' });
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', dateOfBirth: '', gender: 'male',
     admissionNumber: '', admissionDate: new Date().toISOString().split('T')[0],
@@ -47,6 +52,10 @@ const Students = () => {
   useEffect(() => {
     userApi.getParents().then(res => setParents(res.data.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (showRollback) fetchRollbackPreview(rollbackData);
+  }, [showRollback]);
 
   const resetForm = () => {
     setFormData({
@@ -150,6 +159,51 @@ const Students = () => {
     }
   };
 
+  const resetRollback = () => {
+    setRollbackData({ fromClass: '1', toClass: 'Sr. KG', updatedAfter: '' });
+    setRollbackPreviewCount(null);
+  };
+
+  const fetchRollbackPreview = async (data) => {
+    if (!data.fromClass || !data.toClass) return;
+    setRollbackLoadingPreview(true);
+    setRollbackPreviewCount(null);
+    try {
+      const params = { fromClass: data.fromClass, toClass: data.toClass };
+      if (data.updatedAfter) params.updatedAfter = new Date(data.updatedAfter).toISOString();
+      const res = await studentApi.rollbackPromotePreview(params);
+      setRollbackPreviewCount(res.data.data.count);
+    } catch {
+      setRollbackPreviewCount(null);
+    } finally {
+      setRollbackLoadingPreview(false);
+    }
+  };
+
+  const handleRollbackFieldChange = (field, value) => {
+    const updated = { ...rollbackData, [field]: value };
+    setRollbackData(updated);
+    fetchRollbackPreview(updated);
+  };
+
+  const handleRollbackSubmit = async () => {
+    if (!rollbackData.fromClass || !rollbackData.toClass) return;
+    setRollingBack(true);
+    try {
+      const payload = { fromClass: rollbackData.fromClass, toClass: rollbackData.toClass };
+      if (rollbackData.updatedAfter) payload.updatedAfter = new Date(rollbackData.updatedAfter).toISOString();
+      const res = await studentApi.rollbackPromote(payload);
+      toast.success(res.data.message);
+      setShowRollback(false);
+      resetRollback();
+      dispatch(fetchStudents({ page, limit: 10, search, class: classFilter }));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Rollback failed');
+    } finally {
+      setRollingBack(false);
+    }
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this student?')) return;
     try {
@@ -169,6 +223,9 @@ const Students = () => {
           <p className="text-gray-500">Manage student records ({pagination.total} total)</p>
         </div>
         <div className="flex gap-3">
+          <button onClick={() => { resetRollback(); setShowRollback(true); }} className="btn-secondary flex items-center gap-2 text-amber-700 border-amber-300 hover:bg-amber-50">
+            <HiOutlineRefresh className="h-5 w-5" /> Rollback Promotion
+          </button>
           <button onClick={() => setShowPromote(true)} className="btn-secondary flex items-center gap-2">
             <HiOutlineArrowUp className="h-5 w-5" /> Promote Class
           </button>
@@ -325,6 +382,68 @@ const Students = () => {
               disabled={!promoteData.fromClass || promotePreviewCount === 0 || promotePreviewCount === null || promoting || promoteLoadingPreview}
               className="btn-primary disabled:opacity-50">
               {promoting ? 'Promoting...' : 'Confirm & Promote'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Rollback Promotion Modal */}
+      <Modal isOpen={showRollback} onClose={() => { setShowRollback(false); resetRollback(); }}
+        title="Rollback Class Promotion" size="sm">
+        <div className="space-y-4">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+            This moves students <strong>back</strong> to a previous class. Use this to undo an accidental promotion.
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Currently In (From)</label>
+              <select className="input-field" value={rollbackData.fromClass}
+                onChange={(e) => handleRollbackFieldChange('fromClass', e.target.value)}>
+                <option value="">Select</option>
+                {CLASS_ORDER.map(c => <option key={c} value={c}>{c.startsWith('Jr') || c.startsWith('Sr') ? c : `Class ${c}`}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Move Back To</label>
+              <select className="input-field" value={rollbackData.toClass}
+                onChange={(e) => handleRollbackFieldChange('toClass', e.target.value)}>
+                <option value="">Select</option>
+                {CLASS_ORDER.map(c => <option key={c} value={c}>{c.startsWith('Jr') || c.startsWith('Sr') ? c : `Class ${c}`}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Only students promoted on or after (optional)</label>
+            <input type="date" className="input-field"
+              value={rollbackData.updatedAfter}
+              onChange={(e) => handleRollbackFieldChange('updatedAfter', e.target.value)} />
+            <p className="text-xs text-gray-500 mt-1">Leave blank to move ALL active students from the selected class back. Set a date to target only those promoted on that date or later.</p>
+          </div>
+
+          {(rollbackData.fromClass && rollbackData.toClass) && (
+            <div className={`rounded-lg p-3 text-sm ${
+              rollbackLoadingPreview ? 'bg-gray-50 text-gray-500' :
+              rollbackPreviewCount === null ? 'bg-gray-50 text-gray-500' :
+              rollbackPreviewCount === 0 ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+              'bg-blue-50 text-blue-700 border border-blue-200'
+            }`}>
+              {rollbackLoadingPreview ? 'Loading preview...' :
+               rollbackPreviewCount === null ? 'Select classes above to preview.' :
+               rollbackPreviewCount === 0 ? 'No matching active students found.' :
+               <><strong>{rollbackPreviewCount}</strong> active students will be moved from <strong>{rollbackData.fromClass.startsWith('Jr') || rollbackData.fromClass.startsWith('Sr') ? rollbackData.fromClass : `Class ${rollbackData.fromClass}`}</strong> back to <strong>{rollbackData.toClass.startsWith('Jr') || rollbackData.toClass.startsWith('Sr') ? rollbackData.toClass : `Class ${rollbackData.toClass}`}</strong>.</>
+              }
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => { setShowRollback(false); resetRollback(); }}
+              className="btn-secondary">Cancel</button>
+            <button type="button" onClick={handleRollbackSubmit}
+              disabled={!rollbackData.fromClass || !rollbackData.toClass || rollbackPreviewCount === 0 || rollbackPreviewCount === null || rollingBack || rollbackLoadingPreview}
+              className="btn-primary bg-amber-600 hover:bg-amber-700 disabled:opacity-50">
+              {rollingBack ? 'Rolling back...' : 'Confirm Rollback'}
             </button>
           </div>
         </div>

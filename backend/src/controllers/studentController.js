@@ -229,3 +229,67 @@ export const promoteStudents = asyncHandler(async (req, res) => {
     data: { modifiedCount: result.modifiedCount, fromClass, toClass: toClass ?? 'GRADUATED' },
   });
 });
+
+// @desc    Preview students that would be affected by a rollback
+// @route   GET /api/students/rollback-promote/preview?fromClass=1&toClass=Sr. KG&updatedAfter=...
+// @access  Private/Admin
+export const previewRollbackPromote = asyncHandler(async (req, res) => {
+  const { fromClass, toClass, updatedAfter } = req.query;
+
+  if (!fromClass || !CLASS_ORDER.includes(fromClass)) {
+    res.status(400);
+    throw new Error('Invalid fromClass specified');
+  }
+  if (!toClass || !CLASS_ORDER.includes(toClass)) {
+    res.status(400);
+    throw new Error('Invalid toClass specified');
+  }
+
+  const filter = { class: fromClass, status: 'active' };
+  if (updatedAfter) {
+    const date = new Date(updatedAfter);
+    if (isNaN(date)) { res.status(400); throw new Error('Invalid updatedAfter date'); }
+    filter.updatedAt = { $gte: date };
+  }
+
+  const count = await Student.countDocuments(filter);
+  res.status(200).json({ success: true, data: { count, fromClass, toClass } });
+});
+
+// @desc    Rollback a class promotion (move students back to previous class)
+// @route   POST /api/students/rollback-promote
+// @access  Private/Admin
+export const rollbackPromote = asyncHandler(async (req, res) => {
+  const { fromClass, toClass, updatedAfter } = req.body;
+
+  if (!fromClass || !CLASS_ORDER.includes(fromClass)) {
+    res.status(400);
+    throw new Error('Invalid fromClass specified');
+  }
+  if (!toClass || !CLASS_ORDER.includes(toClass)) {
+    res.status(400);
+    throw new Error('Invalid toClass specified');
+  }
+  if (CLASS_ORDER.indexOf(toClass) >= CLASS_ORDER.indexOf(fromClass)) {
+    res.status(400);
+    throw new Error('toClass must be earlier in the class order than fromClass');
+  }
+
+  const filter = { class: fromClass, status: 'active' };
+  if (updatedAfter) {
+    const date = new Date(updatedAfter);
+    if (isNaN(date)) { res.status(400); throw new Error('Invalid updatedAfter date'); }
+    filter.updatedAt = { $gte: date };
+  }
+
+  const result = await Student.updateMany(filter, { $set: { class: toClass } });
+
+  const fromLabel = fromClass.startsWith('Jr') || fromClass.startsWith('Sr') ? fromClass : `Class ${fromClass}`;
+  const toLabel = toClass.startsWith('Jr') || toClass.startsWith('Sr') ? toClass : `Class ${toClass}`;
+
+  res.status(200).json({
+    success: true,
+    message: `${result.modifiedCount} students moved back from ${fromLabel} to ${toLabel}`,
+    data: { modifiedCount: result.modifiedCount, fromClass, toClass },
+  });
+});
