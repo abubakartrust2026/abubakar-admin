@@ -13,7 +13,7 @@ import { formatDate, formatCurrency, getStatusColor } from '../utils/formatters'
 const defaultFormData = {
   student: '', parent: '', selectedClass: '',
   items: [{ fee: '', description: '', amount: 0 }],
-  dueDate: '', academicYear: '2025-2026', term: '',
+  dueDate: '', academicYear: '2026-2027', term: '',
   tax: 0, discount: 0,
   startMonth: `${new Date().getFullYear()}-01`,
   dueDayOfMonth: 10,

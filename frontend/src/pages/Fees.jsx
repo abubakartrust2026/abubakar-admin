@@ -15,7 +15,7 @@ const Fees = () => {
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({
     name: '', description: '', amount: '', frequency: 'monthly',
-    applicableFor: { classes: [], academicYear: '2025-2026' }, isActive: true,
+    applicableFor: { classes: [], academicYear: '2026-2027' }, isActive: true,
   });
 
   useEffect(() => {
@@ -25,7 +25,7 @@ const Fees = () => {
   const resetForm = () => {
     setFormData({
       name: '', description: '', amount: '', frequency: 'monthly',
-      applicableFor: { classes: [], academicYear: '2025-2026' }, isActive: true,
+      applicableFor: { classes: [], academicYear: '2026-2027' }, isActive: true,
     });
     setEditing(null);
   };

@@ -35,7 +35,7 @@ const Students = () => {
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', dateOfBirth: '', gender: 'male',
     admissionNumber: '', admissionDate: new Date().toISOString().split('T')[0],
-    class: '', section: '', rollNumber: '', parent: '', academicYear: '2025-2026',
+    class: '', section: '', rollNumber: '', parent: '', academicYear: '2026-2027',
     bloodGroup: '', address: { street: '', city: '', state: '', zipCode: '' },
     emergencyContact: { name: '', relationship: '', phone: '' },
   });
@@ -52,7 +52,7 @@ const Students = () => {
     setFormData({
       firstName: '', lastName: '', dateOfBirth: '', gender: 'male',
       admissionNumber: '', admissionDate: new Date().toISOString().split('T')[0],
-      class: '', section: '', rollNumber: '', parent: '', academicYear: '2025-2026',
+      class: '', section: '', rollNumber: '', parent: '', academicYear: '2026-2027',
       bloodGroup: '', address: { street: '', city: '', state: '', zipCode: '' },
       emergencyContact: { name: '', relationship: '', phone: '' },
     });
@@ -447,8 +447,8 @@ const Students = () => {
               <label className="label">Academic Year</label>
               <select className="input-field" value={formData.academicYear}
                 onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}>
-                <option value="2025-2026">2025-26</option>
                 <option value="2026-2027">2026-27</option>
+                <option value="2025-2026">2025-26</option>
               </select>
             </div>
           </div>
