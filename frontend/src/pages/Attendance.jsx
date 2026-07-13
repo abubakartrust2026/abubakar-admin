@@ -8,6 +8,9 @@ import { studentApi } from '../api/studentApi';
 import Loader from '../components/common/Loader';
 import { formatDate, getStatusColor } from '../utils/formatters';
 
+const CLASS_ORDER = ['Jr. KG', 'Sr. KG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+const formatClassLabel = (c) => (c.startsWith('Jr') || c.startsWith('Sr') ? c : `Class ${c}`);
+
 const Attendance = () => {
   const dispatch = useDispatch();
   const { records, loading } = useSelector((state) => state.attendance);
@@ -85,8 +88,8 @@ const Attendance = () => {
         <select value={selectedClass} onChange={(e) => { setSelectedClass(e.target.value); setMarkingMode(false); }}
           className="input-field w-full sm:w-40">
           <option value="">All Classes</option>
-          {['1','2','3','4','5','6','7','8','9','10'].map(c => (
-            <option key={c} value={c}>Class {c}</option>
+          {CLASS_ORDER.map(c => (
+            <option key={c} value={c}>{formatClassLabel(c)}</option>
           ))}
         </select>
         {!markingMode && (
@@ -101,7 +104,7 @@ const Attendance = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
           <div className="p-4 border-b flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">
-              Mark Attendance — Class {selectedClass} — {formatDate(selectedDate)}
+              Mark Attendance — {formatClassLabel(selectedClass)} — {formatDate(selectedDate)}
             </h3>
             <div className="flex gap-2">
               <button onClick={() => setMarkingMode(false)} className="btn-secondary text-sm">Cancel</button>
