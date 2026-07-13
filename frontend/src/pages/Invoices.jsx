@@ -10,6 +10,20 @@ import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
 import { formatDate, formatCurrency, getStatusColor } from '../utils/formatters';
 
+const SortableHeader = ({ field, children, align = 'left', sortField, sortOrder, onSort }) => (
+  <th
+    onClick={() => onSort(field)}
+    className={`py-3 px-4 font-medium text-gray-500 cursor-pointer select-none hover:text-gray-700 ${align === 'right' ? 'text-right' : 'text-left'}`}
+  >
+    <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
+      {children}
+      {sortField === field && (
+        sortOrder === 'asc' ? <HiChevronUp className="h-3.5 w-3.5" /> : <HiChevronDown className="h-3.5 w-3.5" />
+      )}
+    </span>
+  </th>
+);
+
 const defaultFormData = {
   student: '', parent: '', selectedClass: '',
   items: [{ fee: '', description: '', amount: 0 }],
@@ -213,20 +227,6 @@ Abubakar English School`;
     });
   }, [invoices, sortField, sortOrder]);
 
-  const SortableHeader = ({ field, children, align = 'left' }) => (
-    <th
-      onClick={() => handleSort(field)}
-      className={`py-3 px-4 font-medium text-gray-500 cursor-pointer select-none hover:text-gray-700 ${align === 'right' ? 'text-right' : 'text-left'}`}
-    >
-      <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
-        {children}
-        {sortField === field && (
-          sortOrder === 'asc' ? <HiChevronUp className="h-3.5 w-3.5" /> : <HiChevronDown className="h-3.5 w-3.5" />
-        )}
-      </span>
-    </th>
-  );
-
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this invoice? This cannot be undone.')) return;
     try {
@@ -271,11 +271,11 @@ Abubakar English School`;
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <SortableHeader field="invoiceNumber">Invoice #</SortableHeader>
-                  <SortableHeader field="student">Student</SortableHeader>
-                  <SortableHeader field="total">Total</SortableHeader>
-                  <SortableHeader field="dueDate">Due Date</SortableHeader>
-                  <SortableHeader field="status">Status</SortableHeader>
+                  <SortableHeader field="invoiceNumber" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Invoice #</SortableHeader>
+                  <SortableHeader field="student" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Student</SortableHeader>
+                  <SortableHeader field="total" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Total</SortableHeader>
+                  <SortableHeader field="dueDate" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Due Date</SortableHeader>
+                  <SortableHeader field="status" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Status</SortableHeader>
                   <th className="text-right py-3 px-4 font-medium text-gray-500">Actions</th>
                 </tr>
               </thead>

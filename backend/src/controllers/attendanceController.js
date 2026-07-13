@@ -78,7 +78,7 @@ export const markAttendance = asyncHandler(async (req, res) => {
       .populate({ path: 'student', select: 'firstName lastName class section rollNumber parent', populate: { path: 'parent', select: 'phone' } })
       .populate('markedBy', 'firstName lastName');
 
-    await notifyParentsOfAttendance([populated]);
+    notifyParentsOfAttendance([populated]);
 
     return res.status(200).json({
       success: true,
@@ -99,7 +99,7 @@ export const markAttendance = asyncHandler(async (req, res) => {
     .populate({ path: 'student', select: 'firstName lastName class section rollNumber parent', populate: { path: 'parent', select: 'phone' } })
     .populate('markedBy', 'firstName lastName');
 
-  await notifyParentsOfAttendance([populated]);
+  notifyParentsOfAttendance([populated]);
 
   res.status(201).json({
     success: true,

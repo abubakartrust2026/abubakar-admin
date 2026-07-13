@@ -26,6 +26,7 @@ export const sendWhatsAppMessage = async (toPhone, params) => {
   try {
     const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
       method: 'POST',
+      signal: AbortSignal.timeout(10000),
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
