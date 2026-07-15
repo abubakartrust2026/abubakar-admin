@@ -82,13 +82,20 @@ const invoiceSchema = new mongoose.Schema(
 // Auto-generate invoice number before validation (atomic to prevent duplicates)
 invoiceSchema.pre('validate', async function (next) {
   if (!this.invoiceNumber) {
-    const counter = await Counter.findOneAndUpdate(
-      { _id: 'invoiceNumber' },
-      { $inc: { seq: 1 } },
-      { new: true, upsert: true }
-    );
-    const year = new Date().getFullYear();
-    this.invoiceNumber = `INV-${year}-${String(counter.seq).padStart(5, '0')}`;
+    try {
+      const counter = await Counter.findOneAndUpdate(
+        { _id: 'invoiceNumber' },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+      );
+      if (!counter) {
+        return next(new Error('Failed to generate invoice number'));
+      }
+      const year = new Date().getFullYear();
+      this.invoiceNumber = `INV-${year}-${String(counter.seq).padStart(5, '0')}`;
+    } catch (err) {
+      return next(err);
+    }
   }
   next();
 });
