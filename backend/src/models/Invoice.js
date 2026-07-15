@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { INVOICE_STATUS } from '../config/constants.js';
+import { Counter } from './Counter.js';
 
 const invoiceSchema = new mongoose.Schema(
   {
@@ -78,12 +79,16 @@ const invoiceSchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate invoice number before validation
+// Auto-generate invoice number before validation (atomic to prevent duplicates)
 invoiceSchema.pre('validate', async function (next) {
   if (!this.invoiceNumber) {
-    const count = await mongoose.model('Invoice').countDocuments();
+    const counter = await Counter.findOneAndUpdate(
+      { _id: 'invoiceNumber' },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
     const year = new Date().getFullYear();
-    this.invoiceNumber = `INV-${year}-${String(count + 1).padStart(5, '0')}`;
+    this.invoiceNumber = `INV-${year}-${String(counter.seq).padStart(5, '0')}`;
   }
   next();
 });

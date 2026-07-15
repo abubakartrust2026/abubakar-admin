@@ -5,6 +5,15 @@ export const errorHandler = (err, req, res, next) => {
   // Log error for debugging
   console.error('Error:', err.message);
 
+  // MongoDB duplicate key error
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyValue || {})[0] || 'field';
+    return res.status(409).json({
+      success: false,
+      message: `A record with this ${field} already exists.`,
+    });
+  }
+
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
 
   res.status(statusCode).json({
