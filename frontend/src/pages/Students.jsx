@@ -10,7 +10,7 @@ import { studentApi } from '../api/studentApi';
 import { userApi } from '../api/userApi';
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
-import { formatDate, getStatusColor } from '../utils/formatters';
+import { formatDate, getStatusColor, getCurrentAcademicYear, getAcademicYearOptions } from '../utils/formatters';
 
 const Students = () => {
   const dispatch = useDispatch();
@@ -35,7 +35,7 @@ const Students = () => {
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', dateOfBirth: '', gender: 'male',
     admissionNumber: '', admissionDate: new Date().toISOString().split('T')[0],
-    class: '', section: '', rollNumber: '', parent: '', academicYear: '2025-2026',
+    class: '', section: '', rollNumber: '', parent: '', academicYear: getCurrentAcademicYear(),
     bloodGroup: '', address: { street: '', city: '', state: '', zipCode: '' },
     emergencyContact: { name: '', relationship: '', phone: '' },
   });
@@ -52,7 +52,7 @@ const Students = () => {
     setFormData({
       firstName: '', lastName: '', dateOfBirth: '', gender: 'male',
       admissionNumber: '', admissionDate: new Date().toISOString().split('T')[0],
-      class: '', section: '', rollNumber: '', parent: '', academicYear: '2025-2026',
+      class: '', section: '', rollNumber: '', parent: '', academicYear: getCurrentAcademicYear(),
       bloodGroup: '', address: { street: '', city: '', state: '', zipCode: '' },
       emergencyContact: { name: '', relationship: '', phone: '' },
     });
@@ -447,8 +447,9 @@ const Students = () => {
               <label className="label">Academic Year</label>
               <select className="input-field" value={formData.academicYear}
                 onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}>
-                <option value="2025-2026">2025-26</option>
-                <option value="2026-2027">2026-27</option>
+                {getAcademicYearOptions().map(y => (
+                  <option key={y} value={y}>{y.replace(/(\d{4})-\d{2}(\d{2})/, '$1-$2')}</option>
+                ))}
               </select>
             </div>
           </div>

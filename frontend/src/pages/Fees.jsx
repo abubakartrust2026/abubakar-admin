@@ -6,7 +6,7 @@ import { fetchFees } from '../store/slices/feeSlice';
 import { feeApi } from '../api/feeApi';
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getCurrentAcademicYear } from '../utils/formatters';
 
 const Fees = () => {
   const dispatch = useDispatch();
@@ -15,7 +15,7 @@ const Fees = () => {
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({
     name: '', description: '', amount: '', frequency: 'monthly',
-    applicableFor: { classes: [], academicYear: '2025-2026' }, isActive: true,
+    applicableFor: { classes: [], academicYear: getCurrentAcademicYear() }, isActive: true,
   });
 
   useEffect(() => {
@@ -25,7 +25,7 @@ const Fees = () => {
   const resetForm = () => {
     setFormData({
       name: '', description: '', amount: '', frequency: 'monthly',
-      applicableFor: { classes: [], academicYear: '2025-2026' }, isActive: true,
+      applicableFor: { classes: [], academicYear: getCurrentAcademicYear() }, isActive: true,
     });
     setEditing(null);
   };

@@ -8,14 +8,7 @@ import { invoiceApi } from '../api/feeApi';
 import { studentApi } from '../api/studentApi';
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
-import { formatDate, formatCurrency, getStatusColor } from '../utils/formatters';
-
-function getCurrentAcademicYear() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return month >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
-}
+import { formatDate, formatCurrency, getStatusColor, getCurrentAcademicYear } from '../utils/formatters';
 
 const defaultFormData = {
   student: '', parent: '', selectedClass: '',
