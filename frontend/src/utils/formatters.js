@@ -1,5 +1,20 @@
 import { format, parseISO, isValid } from 'date-fns';
 
+// Returns e.g. '2026-2027' from June onward, '2025-2026' before June
+export const getCurrentAcademicYear = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  return month >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+};
+
+// Returns 3 academic year strings: previous, current, next
+// e.g. ['2025-2026', '2026-2027', '2027-2028'] in July 2026
+export const getAcademicYearOptions = () => {
+  const baseYear = parseInt(getCurrentAcademicYear().split('-')[0], 10);
+  return [baseYear - 1, baseYear, baseYear + 1].map(y => `${y}-${y + 1}`);
+};
+
 export const formatDate = (date) => {
   if (!date) return '-';
   const d = typeof date === 'string' ? parseISO(date) : date;

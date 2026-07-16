@@ -9,6 +9,7 @@ import Student from '../models/Student.js';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import { USER_ROLES } from '../config/constants.js';
+import { syncInvoiceCounter } from '../utils/invoiceCounter.js';
 
 dotenv.config();
 
@@ -275,6 +276,7 @@ async function run() {
   console.log(`Mode: ${dryRun ? 'DRY RUN' : 'WRITE'}`);
 
   await connectDB();
+  await syncInvoiceCounter();
 
   const workbook = xlsx.readFile(excelPath);
   const allRows = workbook.SheetNames.flatMap((sheetName) =>

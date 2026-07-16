@@ -8,12 +8,12 @@ import { invoiceApi } from '../api/feeApi';
 import { studentApi } from '../api/studentApi';
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
-import { formatDate, formatCurrency, getStatusColor } from '../utils/formatters';
+import { formatDate, formatCurrency, getStatusColor, getCurrentAcademicYear } from '../utils/formatters';
 
 const defaultFormData = {
   student: '', parent: '', selectedClass: '',
   items: [{ fee: '', description: '', amount: 0 }],
-  dueDate: '', academicYear: '2025-2026', term: '',
+  dueDate: '', academicYear: getCurrentAcademicYear(), term: '',
   tax: 0, discount: 0,
   startMonth: `${new Date().getFullYear()}-01`,
   dueDayOfMonth: 10,
@@ -378,6 +378,14 @@ Abubakar English School`;
             )}
             {/* Hidden required input to trigger form validation if no student selected */}
             <input type="text" required className="sr-only" value={formData.student} readOnly tabIndex={-1} />
+          </div>
+
+          {/* Academic Year */}
+          <div>
+            <label className="label">Academic Year *</label>
+            <input type="text" className="input-field" required placeholder="e.g. 2026-2027"
+              value={formData.academicYear}
+              onChange={(e) => setFormData(prev => ({ ...prev, academicYear: e.target.value }))} />
           </div>
 
           {/* Due Date (single) OR Start Month + Due Day (bulk) */}
