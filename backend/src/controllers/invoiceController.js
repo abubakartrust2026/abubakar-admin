@@ -1,6 +1,28 @@
 import asyncHandler from 'express-async-handler';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
+import { Counter } from '../models/Counter.js';
+
+async function syncInvoiceCounter() {
+  const invoices = await Invoice.find(
+    { invoiceNumber: /^INV-\d{4}-\d+$/ },
+    { invoiceNumber: 1 }
+  ).lean();
+  let maxSeq = 0;
+  for (const inv of invoices) {
+    const parts = inv.invoiceNumber.split('-');
+    const seq = parseInt(parts[2], 10);
+    if (seq > maxSeq) maxSeq = seq;
+  }
+  if (maxSeq > 0) {
+    await Counter.findOneAndUpdate(
+      { _id: 'invoiceNumber' },
+      { $max: { seq: maxSeq } },
+      { upsert: true }
+    );
+  }
+  return maxSeq;
+}
 
 // @desc    Get all invoices
 // @route   GET /api/invoices
@@ -78,15 +100,27 @@ export const getInvoiceById = asyncHandler(async (req, res) => {
 export const createInvoice = asyncHandler(async (req, res) => {
   const { items, tax = 0, discount = 0 } = req.body;
 
-  // Calculate totals
   const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
   const total = subtotal + tax - discount;
 
-  const invoice = await Invoice.create({
-    ...req.body,
-    subtotal,
-    total,
-  });
+  let invoice;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const data = { ...req.body, subtotal, total };
+      delete data.invoiceNumber; // always let the pre-validate hook generate it
+      invoice = await Invoice.create(data);
+      break;
+    } catch (err) {
+      if (err.code === 11000 && err.keyValue?.invoiceNumber) {
+        await syncInvoiceCounter();
+        lastError = err;
+      } else {
+        throw err;
+      }
+    }
+  }
+  if (!invoice) throw lastError;
 
   const populated = await Invoice.findById(invoice._id)
     .populate('student', 'firstName lastName class section admissionNumber')
@@ -96,6 +130,19 @@ export const createInvoice = asyncHandler(async (req, res) => {
     success: true,
     message: 'Invoice created successfully',
     data: populated,
+  });
+});
+
+// @desc    Sync invoice counter with max existing sequence
+// @route   POST /api/invoices/sync-counter
+// @access  Private/Admin
+export const syncCounter = asyncHandler(async (req, res) => {
+  const maxSeq = await syncInvoiceCounter();
+  const counter = await Counter.findById('invoiceNumber').lean();
+  res.status(200).json({
+    success: true,
+    message: 'Counter synced',
+    data: { maxSeqFound: maxSeq, counterSeq: counter?.seq ?? 0 },
   });
 });
 
