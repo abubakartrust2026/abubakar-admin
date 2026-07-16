@@ -1,28 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
-import { Counter } from '../models/Counter.js';
-
-async function syncInvoiceCounter() {
-  const invoices = await Invoice.find(
-    { invoiceNumber: /^INV-\d{4}-\d+$/ },
-    { invoiceNumber: 1 }
-  ).lean();
-  let maxSeq = 0;
-  for (const inv of invoices) {
-    const parts = inv.invoiceNumber.split('-');
-    const seq = parseInt(parts[2], 10);
-    if (seq > maxSeq) maxSeq = seq;
-  }
-  if (maxSeq > 0) {
-    await Counter.findOneAndUpdate(
-      { _id: 'invoiceNumber' },
-      { $max: { seq: maxSeq } },
-      { upsert: true }
-    );
-  }
-  return maxSeq;
-}
+import { syncInvoiceCounter } from '../utils/invoiceCounter.js';
 
 // @desc    Get all invoices
 // @route   GET /api/invoices
@@ -138,11 +117,10 @@ export const createInvoice = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 export const syncCounter = asyncHandler(async (req, res) => {
   const maxSeq = await syncInvoiceCounter();
-  const counter = await Counter.findById('invoiceNumber').lean();
   res.status(200).json({
     success: true,
     message: 'Counter synced',
-    data: { maxSeqFound: maxSeq, counterSeq: counter?.seq ?? 0 },
+    data: { counterSeq: maxSeq },
   });
 });
 

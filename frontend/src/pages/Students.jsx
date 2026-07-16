@@ -447,6 +447,9 @@ const Students = () => {
               <label className="label">Academic Year</label>
               <select className="input-field" value={formData.academicYear}
                 onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}>
+                {formData.academicYear && !getAcademicYearOptions().includes(formData.academicYear) && (
+                  <option value={formData.academicYear}>{formData.academicYear.replace(/(\d{4})-\d{2}(\d{2})/, '$1-$2')}</option>
+                )}
                 {getAcademicYearOptions().map(y => (
                   <option key={y} value={y}>{y.replace(/(\d{4})-\d{2}(\d{2})/, '$1-$2')}</option>
                 ))}

@@ -8,13 +8,10 @@ export const getCurrentAcademicYear = () => {
   return month >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
 };
 
-// Returns an array of academic year strings centered on the current year
-// e.g. ['2024-2025', '2025-2026', '2026-2027', '2027-2028']
+// Returns 3 academic year strings: previous, current, next
+// e.g. ['2025-2026', '2026-2027', '2027-2028'] in July 2026
 export const getAcademicYearOptions = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  const baseYear = month >= 6 ? year : year - 1;
+  const baseYear = parseInt(getCurrentAcademicYear().split('-')[0], 10);
   return [baseYear - 1, baseYear, baseYear + 1].map(y => `${y}-${y + 1}`);
 };
 
