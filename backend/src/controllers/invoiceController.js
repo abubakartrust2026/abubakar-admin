@@ -1,18 +1,33 @@
 import asyncHandler from 'express-async-handler';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
+import Student from '../models/Student.js';
 import { syncInvoiceCounter } from '../utils/invoiceCounter.js';
 
 // @desc    Get all invoices
 // @route   GET /api/invoices
 // @access  Private
 export const getInvoices = asyncHandler(async (req, res) => {
-  const { status, studentId, parentId, page = 1, limit = 10 } = req.query;
+  const { status, studentId, parentId, search, page = 1, limit = 10 } = req.query;
   const query = {};
 
   if (status) query.status = status;
   if (studentId) query.student = studentId;
   if (parentId) query.parent = parentId;
+
+  if (search) {
+    const matchingStudents = await Student.find({
+      $or: [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+      ],
+    }).select('_id');
+
+    query.$or = [
+      { invoiceNumber: { $regex: search, $options: 'i' } },
+      { student: { $in: matchingStudents.map((s) => s._id) } },
+    ];
+  }
 
   // Parents can only view their own invoices
   if (req.user.role === 'parent') {

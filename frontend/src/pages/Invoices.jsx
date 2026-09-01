@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { HiOutlinePlus, HiOutlineEye, HiOutlinePencil, HiOutlineTrash, HiChevronUp, HiChevronDown } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineEye, HiOutlinePencil, HiOutlineTrash, HiChevronUp, HiChevronDown, HiOutlineSearch } from 'react-icons/hi';
 import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { fetchInvoices, fetchFees } from '../store/slices/feeSlice';
@@ -40,6 +40,7 @@ const Invoices = () => {
   const isAdmin = user?.role === 'admin';
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [invoiceMode, setInvoiceMode] = useState('single'); // 'single' | 'bulk'
@@ -53,9 +54,15 @@ const Invoices = () => {
   const [sortOrder, setSortOrder] = useState('asc');
 
   useEffect(() => {
-    dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined }));
+    const timer = setTimeout(() => {
+      dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined, search: search || undefined }));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [dispatch, page, statusFilter, search]);
+
+  useEffect(() => {
     dispatch(fetchFees({}));
-  }, [dispatch, page, statusFilter]);
+  }, [dispatch]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -266,7 +273,7 @@ Abubakar English School`;
     try {
       await invoiceApi.delete(id);
       toast.success('Invoice deleted');
-      dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined }));
+      dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined, search: search || undefined }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to delete invoice');
     }
@@ -287,9 +294,17 @@ Abubakar English School`;
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
+          <HiOutlineSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none z-10" />
+          <input
+            type="text" placeholder="Search by invoice number or student name..."
+            value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="input-field !pl-10"
+          />
+        </div>
         <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="input-field w-48">
+          className="input-field w-full sm:w-48">
           <option value="">All Statuses</option>
           <option value="pending">Pending</option>
           <option value="paid">Paid</option>
