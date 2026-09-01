@@ -1,6 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import Attendance from '../models/Attendance.js';
 import Student from '../models/Student.js';
+import { notifyParentsOfAttendance } from '../utils/whatsappService.js';
 
 // @desc    Get attendance records
 // @route   GET /api/attendance
@@ -74,8 +75,10 @@ export const markAttendance = asyncHandler(async (req, res) => {
     await existing.save();
 
     const populated = await Attendance.findById(existing._id)
-      .populate('student', 'firstName lastName class section rollNumber')
+      .populate({ path: 'student', select: 'firstName lastName class section rollNumber parent', populate: { path: 'parent', select: 'phone' } })
       .populate('markedBy', 'firstName lastName');
+
+    notifyParentsOfAttendance([populated]);
 
     return res.status(200).json({
       success: true,
@@ -93,8 +96,10 @@ export const markAttendance = asyncHandler(async (req, res) => {
   });
 
   const populated = await Attendance.findById(attendance._id)
-    .populate('student', 'firstName lastName class section rollNumber')
+    .populate({ path: 'student', select: 'firstName lastName class section rollNumber parent', populate: { path: 'parent', select: 'phone' } })
     .populate('markedBy', 'firstName lastName');
+
+  notifyParentsOfAttendance([populated]);
 
   res.status(201).json({
     success: true,
@@ -144,10 +149,14 @@ export const bulkMarkAttendance = asyncHandler(async (req, res) => {
     }
   }
 
+  await Attendance.populate(results, { path: 'student', select: 'firstName lastName class section rollNumber parent', populate: { path: 'parent', select: 'phone' } });
+  const notificationSummary = await notifyParentsOfAttendance(results);
+
   res.status(201).json({
     success: true,
     message: `Attendance marked for ${results.length} students`,
     data: results,
+    notifications: notificationSummary,
   });
 });
 

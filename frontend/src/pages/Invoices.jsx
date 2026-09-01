@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { HiOutlinePlus, HiOutlineEye, HiOutlineTrash } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineEye, HiOutlineTrash, HiChevronUp, HiChevronDown } from 'react-icons/hi';
 import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { fetchInvoices, fetchFees } from '../store/slices/feeSlice';
@@ -9,6 +9,20 @@ import { studentApi } from '../api/studentApi';
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
 import { formatDate, formatCurrency, getStatusColor, getCurrentAcademicYear } from '../utils/formatters';
+
+const SortableHeader = ({ field, children, align = 'left', sortField, sortOrder, onSort }) => (
+  <th
+    onClick={() => onSort(field)}
+    className={`py-3 px-4 font-medium text-gray-500 cursor-pointer select-none hover:text-gray-700 ${align === 'right' ? 'text-right' : 'text-left'}`}
+  >
+    <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
+      {children}
+      {sortField === field && (
+        sortOrder === 'asc' ? <HiChevronUp className="h-3.5 w-3.5" /> : <HiChevronDown className="h-3.5 w-3.5" />
+      )}
+    </span>
+  </th>
+);
 
 const defaultFormData = {
   student: '', parent: '', selectedClass: '',
@@ -34,6 +48,8 @@ const Invoices = () => {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [viewInvoice, setViewInvoice] = useState(null);
   const [formData, setFormData] = useState(defaultFormData);
+  const [sortField, setSortField] = useState(null);
+  const [sortOrder, setSortOrder] = useState('asc');
 
   useEffect(() => {
     dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined }));
@@ -181,6 +197,36 @@ Abubakar English School`;
     }
   };
 
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedInvoices = useMemo(() => {
+    if (!sortField) return invoices;
+    const getValue = (inv) => {
+      switch (sortField) {
+        case 'invoiceNumber': return inv.invoiceNumber || '';
+        case 'student': return `${inv.student?.firstName || ''} ${inv.student?.lastName || ''}`.trim().toLowerCase();
+        case 'total': return inv.total || 0;
+        case 'dueDate': return inv.dueDate ? new Date(inv.dueDate).getTime() : 0;
+        case 'status': return inv.status || '';
+        default: return '';
+      }
+    };
+    return [...invoices].sort((a, b) => {
+      const va = getValue(a);
+      const vb = getValue(b);
+      if (va < vb) return sortOrder === 'asc' ? -1 : 1;
+      if (va > vb) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [invoices, sortField, sortOrder]);
+
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this invoice? This cannot be undone.')) return;
     try {
@@ -225,19 +271,19 @@ Abubakar English School`;
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Invoice #</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Student</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Total</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Due Date</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Status</th>
+                  <SortableHeader field="invoiceNumber" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Invoice #</SortableHeader>
+                  <SortableHeader field="student" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Student</SortableHeader>
+                  <SortableHeader field="total" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Total</SortableHeader>
+                  <SortableHeader field="dueDate" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Due Date</SortableHeader>
+                  <SortableHeader field="status" sortField={sortField} sortOrder={sortOrder} onSort={handleSort}>Status</SortableHeader>
                   <th className="text-right py-3 px-4 font-medium text-gray-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {invoices.length === 0 ? (
+                {sortedInvoices.length === 0 ? (
                   <tr><td colSpan="6" className="py-8 text-center text-gray-400">No invoices found</td></tr>
                 ) : (
-                  invoices.map(inv => (
+                  sortedInvoices.map(inv => (
                     <tr key={inv._id} className="hover:bg-gray-50">
                       <td className="py-3 px-4 font-mono text-sm">{inv.invoiceNumber}</td>
                       <td className="py-3 px-4">{inv.student?.firstName} {inv.student?.lastName}</td>
