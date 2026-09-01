@@ -90,7 +90,11 @@ const Invoices = () => {
       ...defaultFormData,
       student: invoice.student?._id || invoice.student || '',
       parent: invoice.parent?._id || invoice.parent || '',
-      items: (invoice.items || []).map(item => ({ fee: item.fee || '', description: item.description, amount: item.amount })),
+      items: (invoice.items || []).map(item => ({
+        fee: item.fee?._id || item.fee || '',
+        description: item.description || (typeof item.fee === 'object' ? item.fee?.name : '') || '',
+        amount: item.amount,
+      })),
       dueDate: invoice.dueDate ? invoice.dueDate.split('T')[0] : '',
       academicYear: invoice.academicYear || getCurrentAcademicYear(),
       term: invoice.term || '',
