@@ -1,6 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import Payment from '../models/Payment.js';
 import Invoice from '../models/Invoice.js';
+import Student from '../models/Student.js';
 import { PAYMENT_METHOD } from '../config/constants.js';
 
 // Records a single payment against an already-fetched invoice, validating the
@@ -42,12 +43,26 @@ const recordPaymentForInvoice = async (invoice, paymentData, userId) => {
 // @route   GET /api/payments
 // @access  Private
 export const getPayments = asyncHandler(async (req, res) => {
-  const { studentId, invoiceId, status, startDate, endDate, page = 1, limit = 10 } = req.query;
+  const { studentId, invoiceId, status, startDate, endDate, search, page = 1, limit = 10 } = req.query;
   const query = {};
 
   if (studentId) query.student = studentId;
   if (invoiceId) query.invoice = invoiceId;
   if (status) query.status = status;
+
+  if (search) {
+    const matchingStudents = await Student.find({
+      $or: [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+      ],
+    }).select('_id');
+
+    query.$or = [
+      { receiptNumber: { $regex: search, $options: 'i' } },
+      { student: { $in: matchingStudents.map((s) => s._id) } },
+    ];
+  }
 
   // Parents can only view their own payments
   if (req.user.role === 'parent') {

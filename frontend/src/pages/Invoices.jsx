@@ -96,7 +96,11 @@ const Invoices = () => {
       ...defaultFormData,
       student: invoice.student?._id || invoice.student || '',
       parent: invoice.parent?._id || invoice.parent || '',
-      items: (invoice.items || []).map(item => ({ fee: item.fee || '', description: item.description, amount: item.amount })),
+      items: (invoice.items || []).map(item => ({
+        fee: item.fee?._id || item.fee || '',
+        description: item.description || (typeof item.fee === 'object' ? item.fee?.name : '') || '',
+        amount: item.amount,
+      })),
       dueDate: invoice.dueDate ? invoice.dueDate.split('T')[0] : '',
       academicYear: invoice.academicYear || getCurrentAcademicYear(),
       term: invoice.term || '',
@@ -194,7 +198,7 @@ const Invoices = () => {
         toast.success('12 monthly invoices created successfully');
       }
       handleCloseForm();
-      dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined }));
+      dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined, search: search || undefined }));
     } catch (err) {
       toast.error(err.response?.data?.message || (editing ? 'Failed to update invoice' : 'Failed to create invoice'));
     } finally {

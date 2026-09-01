@@ -15,6 +15,23 @@ export const getAcademicYearOptions = () => {
   return [baseYear - 1, baseYear, baseYear + 1].map(y => `${y}-${y + 1}`);
 };
 
+// Indian financial year runs Apr-Mar, e.g. "2026-27"
+export const getCurrentFinancialYear = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const startYear = month >= 4 ? year : year - 1;
+  return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
+};
+
+// Returns 3 financial year strings: previous, current, next
+export const getFinancialYearOptions = () => {
+  const baseYear = parseInt(getCurrentFinancialYear().split('-')[0], 10);
+  return [baseYear - 1, baseYear, baseYear + 1].map(
+    (y) => `${y}-${String((y + 1) % 100).padStart(2, '0')}`
+  );
+};
+
 export const formatDate = (date) => {
   if (!date) return '-';
   const d = typeof date === 'string' ? parseISO(date) : date;
