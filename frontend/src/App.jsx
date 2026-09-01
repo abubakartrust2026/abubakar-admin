@@ -11,6 +11,7 @@ import Invoices from './pages/Invoices';
 import Payments from './pages/Payments';
 import Reports from './pages/Reports';
 import Inventory from './pages/Inventory';
+import Accounts from './pages/Accounts';
 import NotFound from './pages/NotFound';
 
 // Layouts & Auth
@@ -45,6 +46,7 @@ function App() {
         <Route path="payments" element={<Payments />} />
         <Route path="reports" element={<RoleBasedRoute allowedRoles={['admin']}><Reports /></RoleBasedRoute>} />
         <Route path="inventory" element={<RoleBasedRoute allowedRoles={['admin']}><Inventory /></RoleBasedRoute>} />
+        <Route path="accounts" element={<RoleBasedRoute allowedRoles={['admin']}><Accounts /></RoleBasedRoute>} />
       </Route>
 
       {/* 404 Route */}

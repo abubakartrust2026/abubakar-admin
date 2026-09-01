@@ -53,3 +53,41 @@ export const GENDER = {
   FEMALE: 'female',
   OTHER: 'other',
 };
+
+export const LEDGER_TRANSACTION_TYPE = {
+  INCOME: 'income',
+  EXPENSE: 'expense',
+};
+
+export const INCOME_CATEGORY = {
+  FEES: 'fees',
+  DONATION: 'donation',
+  COLLECTION: 'collection',
+  CONTRIBUTION: 'contribution',
+  OTHER_INCOME: 'other_income',
+};
+
+export const EXPENSE_CATEGORY = {
+  SALARY: 'salary',
+  ELECTRICITY: 'electricity',
+  WATER: 'water',
+  RENT: 'rent',
+  REPAIRING: 'repairing',
+  MAINTENANCE: 'maintenance',
+  STATIONERY: 'stationery',
+  BOOKS: 'books',
+  FOOD: 'food',
+  CLEANING: 'cleaning',
+  TRANSPORT: 'transport',
+  PROGRAM_EVENT: 'program_event',
+  CONSTRUCTION: 'construction',
+  OTHER_EXPENSES: 'other_expenses',
+};
+
+export const LEDGER_PAYMENT_MODE = {
+  CASH: 'cash',
+  BANK: 'bank',
+  ONLINE: 'online',
+  CHEQUE: 'cheque',
+  OTHER: 'other',
+};

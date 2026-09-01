@@ -9,6 +9,7 @@ import {
   HiOutlineCreditCard,
   HiOutlineChartBar,
   HiOutlineArchive,
+  HiOutlineCalculator,
 } from 'react-icons/hi';
 
 const Sidebar = () => {
@@ -24,6 +25,7 @@ const Sidebar = () => {
     { to: '/payments', icon: HiOutlineCreditCard, label: 'Payments' },
     { to: '/reports', icon: HiOutlineChartBar, label: 'Reports' },
     { to: '/inventory', icon: HiOutlineArchive, label: 'Inventory' },
+    { to: '/accounts', icon: HiOutlineCalculator, label: 'Accounts' },
   ];
 
   const parentLinks = [
