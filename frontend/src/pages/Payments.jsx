@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Papa from 'papaparse';
-import { HiOutlinePlus, HiOutlineDownload, HiOutlineUpload } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineDownload, HiOutlineUpload, HiOutlineSearch } from 'react-icons/hi';
 import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { fetchPayments } from '../store/slices/feeSlice';
@@ -19,6 +19,7 @@ const Payments = () => {
   const { user } = useSelector((state) => state.auth);
   const isAdmin = user?.role === 'admin';
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [allStudents, setAllStudents] = useState([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
@@ -40,8 +41,8 @@ const Payments = () => {
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
-    dispatch(fetchPayments({ page, limit: 10 }));
-  }, [dispatch, page]);
+    dispatch(fetchPayments({ page, limit: 10, search: search || undefined }));
+  }, [dispatch, page, search]);
 
   const loadStudents = async () => {
     setStudentsLoading(true);
@@ -339,6 +340,18 @@ Abubakar English School`;
           </div>
         </div>
       )}
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
+          <HiOutlineSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none z-10" />
+          <input
+            type="text" placeholder="Search by receipt number or student name..."
+            value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="input-field !pl-10"
+          />
+        </div>
+      </div>
 
       {loading ? <Loader /> : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { HiOutlineArrowLeft } from 'react-icons/hi';
 import { studentApi } from '../api/studentApi';
 import { attendanceApi } from '../api/attendanceApi';
+import { invoiceApi, paymentApi } from '../api/feeApi';
 import Loader from '../components/common/Loader';
 import { formatDate, formatCurrency, getStatusColor, getInitials } from '../utils/formatters';
 
@@ -12,20 +13,26 @@ const StudentDetails = () => {
   const [student, setStudent] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [attendanceSummary, setAttendanceSummary] = useState(null);
+  const [invoices, setInvoices] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [studentRes, attendanceRes, summaryRes] = await Promise.all([
+        const [studentRes, attendanceRes, summaryRes, invoicesRes, paymentsRes] = await Promise.all([
           studentApi.getById(id),
           attendanceApi.getByStudent(id, {}),
           attendanceApi.getSummary(id, {}),
+          invoiceApi.getAll({ studentId: id }),
+          paymentApi.getAll({ studentId: id }),
         ]);
         setStudent(studentRes.data.data);
         setAttendance(attendanceRes.data.data);
         setAttendanceSummary(summaryRes.data.data);
+        setInvoices(invoicesRes.data.data);
+        setPayments(paymentsRes.data.data);
       } catch (err) {
         console.error(err);
       } finally {
@@ -41,6 +48,8 @@ const StudentDetails = () => {
   const tabs = [
     { id: 'profile', label: 'Profile' },
     { id: 'attendance', label: 'Attendance' },
+    { id: 'fees', label: 'Fees' },
+    { id: 'payments', label: 'Payments' },
   ];
 
   return (
@@ -166,6 +175,78 @@ const StudentDetails = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Fees Tab */}
+      {activeTab === 'fees' && (
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Invoice #</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Due Date</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Total</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {invoices.length === 0 ? (
+                <tr><td colSpan="4" className="py-6 text-center text-gray-400">No invoices found</td></tr>
+              ) : (
+                invoices.map(invoice => (
+                  <tr key={invoice._id}>
+                    <td className="py-3 px-4 font-mono text-xs">{invoice.invoiceNumber}</td>
+                    <td className="py-3 px-4 text-gray-600">{formatDate(invoice.dueDate)}</td>
+                    <td className="py-3 px-4 font-semibold text-gray-900">{formatCurrency(invoice.total)}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.status)}`}>
+                        {invoice.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Payments Tab */}
+      {activeTab === 'payments' && (
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Receipt #</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Invoice</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Amount</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Method</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Date</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-500">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {payments.length === 0 ? (
+                <tr><td colSpan="6" className="py-6 text-center text-gray-400">No payments found</td></tr>
+              ) : (
+                payments.map(payment => (
+                  <tr key={payment._id}>
+                    <td className="py-3 px-4 font-mono text-xs">{payment.receiptNumber}</td>
+                    <td className="py-3 px-4 text-xs text-gray-500">{payment.invoice?.invoiceNumber}</td>
+                    <td className="py-3 px-4 font-semibold text-green-600">{formatCurrency(payment.amount)}</td>
+                    <td className="py-3 px-4 capitalize text-gray-600">{payment.paymentMethod?.replace('_', ' ')}</td>
+                    <td className="py-3 px-4 text-gray-600">{formatDate(payment.transactionDate)}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(payment.status)}`}>
+                        {payment.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
