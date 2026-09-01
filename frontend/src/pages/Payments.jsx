@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { HiOutlinePlus, HiOutlineDownload } from 'react-icons/hi';
+import Papa from 'papaparse';
+import { HiOutlinePlus, HiOutlineDownload, HiOutlineUpload } from 'react-icons/hi';
 import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { fetchPayments } from '../store/slices/feeSlice';
@@ -9,6 +10,8 @@ import { studentApi } from '../api/studentApi';
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
 import { formatDate, formatCurrency, getStatusColor } from '../utils/formatters';
+
+const PAYMENT_METHODS = ['cash', 'card', 'online', 'bank_transfer', 'cheque'];
 
 const Payments = () => {
   const dispatch = useDispatch();
@@ -25,10 +28,16 @@ const Payments = () => {
   const [studentInvoices, setStudentInvoices] = useState([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingReceipt, setPendingReceipt] = useState(null);
   const [formData, setFormData] = useState({
     invoice: '', amount: '', paymentMethod: 'cash', remarks: '',
     transactionDate: new Date().toISOString().split('T')[0],
   });
+  const fileInputRef = useRef(null);
+  const [importRows, setImportRows] = useState([]);
+  const [showImportPreview, setShowImportPreview] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     dispatch(fetchPayments({ page, limit: 10 }));
@@ -126,6 +135,8 @@ Abubakar English School`;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const res = await paymentApi.create({
         ...formData,
@@ -134,12 +145,8 @@ Abubakar English School`;
       const newPayment = res.data.data;
       toast.success('Payment recorded successfully');
 
-      // Fetch full invoice details for WhatsApp
       if (selectedInvoice) {
-        try {
-          const invRes = await invoiceApi.getById(selectedInvoice._id);
-          handleWhatsAppNotify(newPayment, invRes.data.data);
-        } catch (_) {}
+        setPendingReceipt({ payment: newPayment, invoiceId: selectedInvoice._id });
       }
 
       setShowForm(false);
@@ -147,6 +154,20 @@ Abubakar English School`;
       dispatch(fetchPayments({ page, limit: 10 }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to record payment');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSendPendingReceipt = async () => {
+    if (!pendingReceipt) return;
+    try {
+      const invRes = await invoiceApi.getById(pendingReceipt.invoiceId);
+      handleWhatsAppNotify(pendingReceipt.payment, invRes.data.data);
+    } catch (err) {
+      toast.error('Failed to load invoice details for WhatsApp receipt');
+    } finally {
+      setPendingReceipt(null);
     }
   };
 
@@ -202,6 +223,81 @@ Abubakar English School`;
     }
   };
 
+  const validateImportRow = (row) => {
+    const invoiceNumber = (row['Invoice #'] || row.invoiceNumber || '').trim();
+    const amount = parseFloat(row['Amount'] || row.amount);
+    const paymentMethod = (row['Payment Method'] || row.paymentMethod || '').trim().toLowerCase();
+    const transactionDate = (row['Transaction Date'] || row.transactionDate || '').trim();
+    const remarks = (row['Remarks'] || row.remarks || '').trim();
+
+    let error = '';
+    if (!invoiceNumber) error = 'Invoice # is required';
+    else if (!amount || amount <= 0) error = 'Amount must be a positive number';
+    else if (!PAYMENT_METHODS.includes(paymentMethod)) error = `Invalid payment method: ${paymentMethod || '(blank)'}`;
+
+    return { invoiceNumber, amount, paymentMethod, transactionDate, remarks, error };
+  };
+
+  const handleImportFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const rows = results.data.map(validateImportRow);
+        if (rows.length === 0) {
+          toast.error('No rows found in CSV');
+          return;
+        }
+        setImportRows(rows);
+        setShowImportPreview(true);
+      },
+      error: () => toast.error('Failed to parse CSV file'),
+    });
+  };
+
+  const handleConfirmImport = async () => {
+    const validRows = importRows.filter(r => !r.error);
+    if (validRows.length === 0 || importing) return;
+    setImporting(true);
+    try {
+      const res = await paymentApi.bulkCreate({
+        payments: validRows.map(r => ({
+          invoiceNumber: r.invoiceNumber,
+          amount: r.amount,
+          paymentMethod: r.paymentMethod,
+          transactionDate: r.transactionDate || undefined,
+          remarks: r.remarks,
+        })),
+      });
+      const { created, failed } = res.data.data;
+      if (created.length > 0) {
+        toast.success(`${created.length} payment(s) imported successfully`);
+        dispatch(fetchPayments({ page, limit: 10 }));
+      }
+      if (failed.length > 0) {
+        toast.warn(`${failed.length} row(s) failed — see preview for details`);
+        const failedByInvoice = new Map(failed.map(f => [f.row.invoiceNumber, f.error]));
+        setImportRows(prev => prev.map(r => {
+          if (r.error) return r;
+          const serverError = failedByInvoice.get(r.invoiceNumber);
+          return serverError ? { ...r, error: serverError } : null;
+        }).filter(Boolean));
+        return;
+      }
+      setShowImportPreview(false);
+      setImportRows([]);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const validImportCount = importRows.filter(r => !r.error).length;
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -214,12 +310,35 @@ Abubakar English School`;
             <HiOutlineDownload className="h-5 w-5" /> Export
           </button>
           {isAdmin && (
-            <button onClick={handleOpenForm} className="btn-primary flex items-center gap-2">
-              <HiOutlinePlus className="h-5 w-5" /> Record Payment
-            </button>
+            <>
+              <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFileSelect} />
+              <button onClick={() => fileInputRef.current?.click()} className="btn-secondary flex items-center gap-2">
+                <HiOutlineUpload className="h-5 w-5" /> Import CSV
+              </button>
+              <button onClick={handleOpenForm} className="btn-primary flex items-center gap-2">
+                <HiOutlinePlus className="h-5 w-5" /> Record Payment
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {pendingReceipt && (
+        <div className="flex items-center justify-between gap-3 p-3 mb-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+          <div className="flex items-center gap-2">
+            <FaWhatsapp className="h-4 w-4" />
+            <span>Payment recorded. Send a WhatsApp receipt to the parent?</span>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={handleSendPendingReceipt} className="btn-primary py-1 px-3 text-xs">
+              Send WhatsApp Receipt
+            </button>
+            <button type="button" onClick={() => setPendingReceipt(null)} className="btn-secondary py-1 px-3 text-xs">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? <Loader /> : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -398,12 +517,60 @@ Abubakar English School`;
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => { setShowForm(false); resetForm(); }} className="btn-secondary">Cancel</button>
             <button type="submit"
-              disabled={!selectedStudent || !formData.invoice || !selectedInvoice}
+              disabled={!selectedStudent || !formData.invoice || !selectedInvoice || isSubmitting}
               className="btn-primary disabled:opacity-50">
-              Record Payment
+              {isSubmitting ? 'Recording...' : 'Record Payment'}
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Import CSV Preview Modal */}
+      <Modal isOpen={showImportPreview} onClose={() => { setShowImportPreview(false); setImportRows([]); }} title="Import Payments from CSV" size="xl">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Expected columns: <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">Invoice #, Amount, Payment Method, Transaction Date, Remarks</code>
+          </p>
+          <p className="text-sm">
+            <span className="text-green-600 font-medium">{validImportCount} valid</span>
+            {importRows.length - validImportCount > 0 && (
+              <span className="text-red-600 font-medium ml-3">{importRows.length - validImportCount} with errors</span>
+            )}
+          </p>
+          <div className="max-h-96 overflow-y-auto border rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Invoice #</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Amount</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Method</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Date</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Remarks</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Error</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {importRows.map((row, idx) => (
+                  <tr key={idx} className={row.error ? 'bg-red-50' : ''}>
+                    <td className="py-2 px-3">{row.invoiceNumber || '—'}</td>
+                    <td className="py-2 px-3">{row.amount || '—'}</td>
+                    <td className="py-2 px-3 capitalize">{row.paymentMethod || '—'}</td>
+                    <td className="py-2 px-3">{row.transactionDate || '—'}</td>
+                    <td className="py-2 px-3 text-gray-500">{row.remarks || '—'}</td>
+                    <td className="py-2 px-3 text-red-600 text-xs">{row.error || ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button type="button" onClick={() => { setShowImportPreview(false); setImportRows([]); }} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={handleConfirmImport} disabled={validImportCount === 0 || importing}
+              className="btn-primary disabled:opacity-50">
+              {importing ? 'Importing...' : `Confirm Import (${validImportCount})`}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

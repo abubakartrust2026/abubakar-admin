@@ -1,6 +1,42 @@
 import asyncHandler from 'express-async-handler';
 import Payment from '../models/Payment.js';
 import Invoice from '../models/Invoice.js';
+import { PAYMENT_METHOD } from '../config/constants.js';
+
+// Records a single payment against an already-fetched invoice, validating the
+// amount against what's currently due and updating the invoice's paid status.
+// Shared by createPayment (single) and bulkCreatePayments (CSV import) so both
+// paths apply identical business rules.
+const recordPaymentForInvoice = async (invoice, paymentData, userId) => {
+  const existingPayments = await Payment.find({ invoice: invoice._id, status: 'completed' });
+  const totalPaid = existingPayments.reduce((sum, p) => sum + p.amount, 0);
+  const amountDue = invoice.total - totalPaid;
+
+  if (paymentData.amount > amountDue) {
+    throw new Error(`Payment amount exceeds amount due (${amountDue})`);
+  }
+
+  const payment = await Payment.create({
+    ...paymentData,
+    invoice: invoice._id,
+    student: invoice.student,
+    parent: invoice.parent,
+    receivedBy: userId,
+  });
+
+  const newTotalPaid = totalPaid + paymentData.amount;
+  if (newTotalPaid >= invoice.total) {
+    invoice.status = 'paid';
+  } else if (newTotalPaid > 0) {
+    invoice.status = 'partially_paid';
+  }
+  await invoice.save();
+
+  return Payment.findById(payment._id)
+    .populate('student', 'firstName lastName class admissionNumber')
+    .populate('parent', 'firstName lastName email')
+    .populate('invoice', 'invoiceNumber total');
+};
 
 // @desc    Get all payments
 // @route   GET /api/payments
@@ -70,7 +106,7 @@ export const getPaymentById = asyncHandler(async (req, res) => {
 // @route   POST /api/payments
 // @access  Private/Admin
 export const createPayment = asyncHandler(async (req, res) => {
-  const { invoice: invoiceId, amount } = req.body;
+  const { invoice: invoiceId } = req.body;
 
   // Verify invoice exists
   const invoice = await Invoice.findById(invoiceId);
@@ -79,41 +115,76 @@ export const createPayment = asyncHandler(async (req, res) => {
     throw new Error('Invoice not found');
   }
 
-  // Check amount doesn't exceed what's due
-  const existingPayments = await Payment.find({ invoice: invoiceId, status: 'completed' });
-  const totalPaid = existingPayments.reduce((sum, p) => sum + p.amount, 0);
-  const amountDue = invoice.total - totalPaid;
-
-  if (amount > amountDue) {
+  let populated;
+  try {
+    populated = await recordPaymentForInvoice(invoice, req.body, req.user._id);
+  } catch (err) {
     res.status(400);
-    throw new Error(`Payment amount exceeds amount due (${amountDue})`);
+    throw err;
   }
-
-  const payment = await Payment.create({
-    ...req.body,
-    student: invoice.student,
-    parent: invoice.parent,
-    receivedBy: req.user._id,
-  });
-
-  // Update invoice status
-  const newTotalPaid = totalPaid + amount;
-  if (newTotalPaid >= invoice.total) {
-    invoice.status = 'paid';
-  } else if (newTotalPaid > 0) {
-    invoice.status = 'partially_paid';
-  }
-  await invoice.save();
-
-  const populated = await Payment.findById(payment._id)
-    .populate('student', 'firstName lastName class admissionNumber')
-    .populate('parent', 'firstName lastName email')
-    .populate('invoice', 'invoiceNumber total');
 
   res.status(201).json({
     success: true,
     message: 'Payment recorded successfully',
     data: populated,
+  });
+});
+
+// @desc    Bulk-record payments from a CSV import
+// @route   POST /api/payments/bulk
+// @access  Private/Admin
+export const bulkCreatePayments = asyncHandler(async (req, res) => {
+  const { payments } = req.body;
+
+  if (!Array.isArray(payments) || payments.length === 0) {
+    res.status(400);
+    throw new Error('No payment rows provided');
+  }
+
+  const created = [];
+  const failed = [];
+
+  // Processed sequentially (not Promise.all): rows can target the same invoice,
+  // and each row's amount-due check must see the previous row's saved result.
+  for (const row of payments) {
+    const { invoiceNumber, amount, paymentMethod, transactionDate, remarks } = row;
+
+    if (!invoiceNumber) {
+      failed.push({ row, error: 'Invoice # is required' });
+      continue;
+    }
+    const parsedAmount = parseFloat(amount);
+    if (!parsedAmount || parsedAmount <= 0) {
+      failed.push({ row, error: 'Amount must be a positive number' });
+      continue;
+    }
+    if (!Object.values(PAYMENT_METHOD).includes(paymentMethod)) {
+      failed.push({ row, error: `Invalid payment method: ${paymentMethod}` });
+      continue;
+    }
+
+    const invoice = await Invoice.findOne({ invoiceNumber });
+    if (!invoice) {
+      failed.push({ row, error: `Invoice not found: ${invoiceNumber}` });
+      continue;
+    }
+
+    try {
+      const payment = await recordPaymentForInvoice(
+        invoice,
+        { amount: parsedAmount, paymentMethod, transactionDate: transactionDate || undefined, remarks },
+        req.user._id
+      );
+      created.push(payment);
+    } catch (err) {
+      failed.push({ row, error: err.message });
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    message: `${created.length} payment(s) recorded, ${failed.length} failed`,
+    data: { created, failed },
   });
 });
 

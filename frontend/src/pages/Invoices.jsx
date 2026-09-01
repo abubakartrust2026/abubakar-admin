@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { HiOutlinePlus, HiOutlineEye, HiOutlineTrash, HiChevronUp, HiChevronDown } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineEye, HiOutlinePencil, HiOutlineTrash, HiChevronUp, HiChevronDown } from 'react-icons/hi';
 import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { fetchInvoices, fetchFees } from '../store/slices/feeSlice';
@@ -41,6 +41,7 @@ const Invoices = () => {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [invoiceMode, setInvoiceMode] = useState('single'); // 'single' | 'bulk'
   const [submitting, setSubmitting] = useState(false);
   const [students, setStudents] = useState([]);
@@ -74,10 +75,30 @@ const Invoices = () => {
 
   const handleCloseForm = () => {
     setShowForm(false);
+    setEditing(null);
     setInvoiceMode('single');
     setFormData(defaultFormData);
     setStudentSearch('');
     setSelectedStudent(null);
+  };
+
+  const handleOpenEdit = (invoice) => {
+    setEditing(invoice);
+    setInvoiceMode('single');
+    setFormData({
+      ...defaultFormData,
+      student: invoice.student?._id || invoice.student || '',
+      parent: invoice.parent?._id || invoice.parent || '',
+      items: (invoice.items || []).map(item => ({ fee: item.fee || '', description: item.description, amount: item.amount })),
+      dueDate: invoice.dueDate ? invoice.dueDate.split('T')[0] : '',
+      academicYear: invoice.academicYear || getCurrentAcademicYear(),
+      term: invoice.term || '',
+      tax: invoice.tax || 0,
+      discount: invoice.discount || 0,
+    });
+    setSelectedStudent(invoice.student || null);
+    setStudentSearch(invoice.student ? `${invoice.student.firstName} ${invoice.student.lastName}` : '');
+    setShowForm(true);
   };
 
   const handleStudentSelect = (student) => {
@@ -110,14 +131,27 @@ const Invoices = () => {
     setSubmitting(true);
     try {
       if (invoiceMode === 'single') {
-        const data = {
-          ...formData,
-          items: formData.items.map(item => ({ ...item, amount: parseFloat(item.amount) })),
-          tax: parseFloat(formData.tax) || 0,
-          discount: parseFloat(formData.discount) || 0,
-        };
-        await invoiceApi.create(data);
-        toast.success('Invoice created');
+        if (editing) {
+          const data = {
+            items: formData.items.map(item => ({ ...item, amount: parseFloat(item.amount) })),
+            dueDate: formData.dueDate,
+            academicYear: formData.academicYear,
+            term: formData.term,
+            tax: parseFloat(formData.tax) || 0,
+            discount: parseFloat(formData.discount) || 0,
+          };
+          await invoiceApi.update(editing._id, data);
+          toast.success('Invoice updated');
+        } else {
+          const data = {
+            ...formData,
+            items: formData.items.map(item => ({ ...item, amount: parseFloat(item.amount) })),
+            tax: parseFloat(formData.tax) || 0,
+            discount: parseFloat(formData.discount) || 0,
+          };
+          await invoiceApi.create(data);
+          toast.success('Invoice created');
+        }
       } else {
         if (!formData.items[0].description) {
           toast.error('Please add at least one fee item');
@@ -155,7 +189,7 @@ const Invoices = () => {
       handleCloseForm();
       dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined }));
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to create invoice');
+      toast.error(err.response?.data?.message || (editing ? 'Failed to update invoice' : 'Failed to create invoice'));
     } finally {
       setSubmitting(false);
     }
@@ -299,6 +333,11 @@ Abubakar English School`;
                           <HiOutlineEye className="h-4 w-4 text-gray-500" />
                         </button>
                         {isAdmin && (
+                          <button onClick={() => handleOpenEdit(inv)} className="p-1.5 hover:bg-gray-100 rounded">
+                            <HiOutlinePencil className="h-4 w-4 text-blue-500" />
+                          </button>
+                        )}
+                        {isAdmin && (
                           <button onClick={() => handleDelete(inv._id)} className="p-1.5 hover:bg-gray-100 rounded">
                             <HiOutlineTrash className="h-4 w-4 text-red-500" />
                           </button>
@@ -371,41 +410,44 @@ Abubakar English School`;
         )}
       </Modal>
 
-      {/* Create Invoice Modal (single + bulk merged) */}
-      <Modal isOpen={showForm} onClose={handleCloseForm} title="Create Invoice" size="lg">
+      {/* Create/Edit Invoice Modal (single + bulk merged) */}
+      <Modal isOpen={showForm} onClose={handleCloseForm} title={editing ? 'Edit Invoice' : 'Create Invoice'} size="lg">
         <form onSubmit={handleSubmit} className="space-y-4">
 
           {/* Mode Toggle */}
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-medium">
-            <button
-              type="button"
-              onClick={() => setInvoiceMode('single')}
-              className={`flex-1 py-2 transition-colors ${invoiceMode === 'single' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-              Single Invoice
-            </button>
-            <button
-              type="button"
-              onClick={() => setInvoiceMode('bulk')}
-              className={`flex-1 py-2 transition-colors ${invoiceMode === 'bulk' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-              12 Monthly
-            </button>
-          </div>
+          {!editing && (
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-medium">
+              <button
+                type="button"
+                onClick={() => setInvoiceMode('single')}
+                className={`flex-1 py-2 transition-colors ${invoiceMode === 'single' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                Single Invoice
+              </button>
+              <button
+                type="button"
+                onClick={() => setInvoiceMode('bulk')}
+                className={`flex-1 py-2 transition-colors ${invoiceMode === 'bulk' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                12 Monthly
+              </button>
+            </div>
+          )}
 
           {/* Student Search */}
           <div className="relative">
             <label className="label">Search Student *</label>
             <input
               type="text"
-              className="input-field"
+              className="input-field disabled:bg-gray-100 disabled:text-gray-500"
               placeholder="Type name or admission number..."
               value={studentSearch}
+              disabled={!!editing}
               onChange={(e) => {
                 setStudentSearch(e.target.value);
                 setSelectedStudent(null);
                 setFormData(prev => ({ ...prev, student: '', parent: '' }));
               }}
             />
-            {studentSearch && !selectedStudent && filteredStudents.length > 0 && (
+            {!editing && studentSearch && !selectedStudent && filteredStudents.length > 0 && (
               <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                 {filteredStudents.map(s => (
                   <button key={s._id} type="button"
@@ -508,9 +550,11 @@ Abubakar English School`;
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={handleCloseForm} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={submitting} className="btn-primary disabled:opacity-50">
-              {submitting
-                ? (invoiceMode === 'bulk' ? 'Generating...' : 'Creating...')
-                : (invoiceMode === 'bulk' ? 'Generate 12 Invoices' : 'Create Invoice')}
+              {editing
+                ? (submitting ? 'Updating...' : 'Update Invoice')
+                : submitting
+                  ? (invoiceMode === 'bulk' ? 'Generating...' : 'Creating...')
+                  : (invoiceMode === 'bulk' ? 'Generate 12 Invoices' : 'Create Invoice')}
             </button>
           </div>
         </form>

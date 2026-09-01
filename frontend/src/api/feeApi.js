@@ -21,4 +21,5 @@ export const paymentApi = {
   getById: (id) => axiosInstance.get(`/payments/${id}`),
   create: (data) => axiosInstance.post('/payments', data),
   update: (id, data) => axiosInstance.put(`/payments/${id}`, data),
+  bulkCreate: (data) => axiosInstance.post('/payments/bulk', data),
 };
