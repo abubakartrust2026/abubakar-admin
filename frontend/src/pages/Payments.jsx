@@ -25,6 +25,8 @@ const Payments = () => {
   const [studentInvoices, setStudentInvoices] = useState([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingReceipt, setPendingReceipt] = useState(null);
   const [formData, setFormData] = useState({
     invoice: '', amount: '', paymentMethod: 'cash', remarks: '',
     transactionDate: new Date().toISOString().split('T')[0],
@@ -126,6 +128,8 @@ Abubakar English School`;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const res = await paymentApi.create({
         ...formData,
@@ -134,12 +138,8 @@ Abubakar English School`;
       const newPayment = res.data.data;
       toast.success('Payment recorded successfully');
 
-      // Fetch full invoice details for WhatsApp
       if (selectedInvoice) {
-        try {
-          const invRes = await invoiceApi.getById(selectedInvoice._id);
-          handleWhatsAppNotify(newPayment, invRes.data.data);
-        } catch (_) {}
+        setPendingReceipt({ payment: newPayment, invoiceId: selectedInvoice._id });
       }
 
       setShowForm(false);
@@ -147,6 +147,20 @@ Abubakar English School`;
       dispatch(fetchPayments({ page, limit: 10 }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to record payment');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSendPendingReceipt = async () => {
+    if (!pendingReceipt) return;
+    try {
+      const invRes = await invoiceApi.getById(pendingReceipt.invoiceId);
+      handleWhatsAppNotify(pendingReceipt.payment, invRes.data.data);
+    } catch (err) {
+      toast.error('Failed to load invoice details for WhatsApp receipt');
+    } finally {
+      setPendingReceipt(null);
     }
   };
 
@@ -220,6 +234,23 @@ Abubakar English School`;
           )}
         </div>
       </div>
+
+      {pendingReceipt && (
+        <div className="flex items-center justify-between gap-3 p-3 mb-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+          <div className="flex items-center gap-2">
+            <FaWhatsapp className="h-4 w-4" />
+            <span>Payment recorded. Send a WhatsApp receipt to the parent?</span>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={handleSendPendingReceipt} className="btn-primary py-1 px-3 text-xs">
+              Send WhatsApp Receipt
+            </button>
+            <button type="button" onClick={() => setPendingReceipt(null)} className="btn-secondary py-1 px-3 text-xs">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? <Loader /> : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -398,9 +429,9 @@ Abubakar English School`;
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => { setShowForm(false); resetForm(); }} className="btn-secondary">Cancel</button>
             <button type="submit"
-              disabled={!selectedStudent || !formData.invoice || !selectedInvoice}
+              disabled={!selectedStudent || !formData.invoice || !selectedInvoice || isSubmitting}
               className="btn-primary disabled:opacity-50">
-              Record Payment
+              {isSubmitting ? 'Recording...' : 'Record Payment'}
             </button>
           </div>
         </form>
