@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/seeders/initialAdmin.js",
+    "seed:institutions": "node src/seeders/seedInstitutions.js",
     "mark-invoices-paid": "node src/seeders/markInvoicesPaid.js",
     "import:students-fees-excel": "node src/seeders/importStudentsFeesFromExcel.js",
     "test": "jest --coverage"

@@ -18,6 +18,9 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
+import institutionRoutes from './routes/institutionRoutes.js';
+import openingBalanceRoutes from './routes/openingBalanceRoutes.js';
+import ledgerRoutes from './routes/ledgerRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -74,6 +77,9 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/institutions', institutionRoutes);
+app.use('/api/opening-balances', openingBalanceRoutes);
+app.use('/api/ledger', ledgerRoutes);
 
 // Error handling
 app.use(notFound);
