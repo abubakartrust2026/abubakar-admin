@@ -54,9 +54,15 @@ const Invoices = () => {
   const [sortOrder, setSortOrder] = useState('asc');
 
   useEffect(() => {
-    dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined, search: search || undefined }));
-    dispatch(fetchFees({}));
+    const timer = setTimeout(() => {
+      dispatch(fetchInvoices({ page, limit: 10, status: statusFilter || undefined, search: search || undefined }));
+    }, 300);
+    return () => clearTimeout(timer);
   }, [dispatch, page, statusFilter, search]);
+
+  useEffect(() => {
+    dispatch(fetchFees({}));
+  }, [dispatch]);
 
   useEffect(() => {
     if (isAdmin) {
