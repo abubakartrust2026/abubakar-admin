@@ -99,6 +99,7 @@ const AdminDashboard = () => {
           {monthlyRevenue.length > 0 ? (
             <Bar data={revenueChartData} options={{
               responsive: true,
+              animation: false,
               plugins: { legend: { display: false } },
               scales: {
                 y: {
@@ -116,7 +117,7 @@ const AdminDashboard = () => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Students by Class</h3>
           {studentsByClass.length > 0 ? (
             <div className="relative h-64">
-              <Doughnut data={studentDistribution} options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }} />
+              <Doughnut data={studentDistribution} options={{ maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom' } } }} />
             </div>
           ) : (
             <p className="text-gray-400 text-center py-8">No student data available</p>
