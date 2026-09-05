@@ -1,5 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
+import Student from '../models/Student.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -10,10 +12,11 @@ export const getUsers = asyncHandler(async (req, res) => {
 
   if (role) query.role = role;
   if (search) {
+    const searchRegex = escapeRegex(search);
     query.$or = [
-      { firstName: { $regex: search, $options: 'i' } },
-      { lastName: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
+      { firstName: { $regex: searchRegex, $options: 'i' } },
+      { lastName: { $regex: searchRegex, $options: 'i' } },
+      { email: { $regex: searchRegex, $options: 'i' } },
     ];
   }
 
@@ -105,6 +108,14 @@ export const deleteUser = asyncHandler(async (req, res) => {
   if (!user) {
     res.status(404);
     throw new Error('User not found');
+  }
+
+  if (user.role === 'parent') {
+    const hasStudents = await Student.exists({ parent: user._id });
+    if (hasStudents) {
+      res.status(400);
+      throw new Error('Cannot delete parent with linked students. Reassign or delete students first.');
+    }
   }
 
   await User.findByIdAndDelete(req.params.id);

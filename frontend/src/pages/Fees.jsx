@@ -13,6 +13,7 @@ const Fees = () => {
   const { fees, loading } = useSelector((state) => state.fees);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '', description: '', amount: '', frequency: 'monthly',
     applicableFor: { classes: [], academicYear: getCurrentAcademicYear() }, isActive: true,
@@ -42,6 +43,8 @@ const Fees = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const data = { ...formData, amount: parseFloat(formData.amount) };
       if (editing) {
@@ -56,6 +59,8 @@ const Fees = () => {
       dispatch(fetchFees({}));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Operation failed');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -179,7 +184,7 @@ const Fees = () => {
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => { setShowForm(false); resetForm(); }} className="btn-secondary">Cancel</button>
-            <button type="submit" className="btn-primary">{editing ? 'Update' : 'Create'}</button>
+            <button type="submit" disabled={submitting} className="btn-primary disabled:opacity-50">{submitting ? 'Saving...' : (editing ? 'Update' : 'Create')}</button>
           </div>
         </form>
       </Modal>
