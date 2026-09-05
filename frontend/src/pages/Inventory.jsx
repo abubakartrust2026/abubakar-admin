@@ -29,7 +29,9 @@ const Inventory = () => {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState(defaultForm);
+  const [submitting, setSubmitting] = useState(false);
   const [stockModal, setStockModal] = useState(null); // { item, adjustment: '' }
+  const [adjusting, setAdjusting] = useState(false);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -61,6 +63,8 @@ const Inventory = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const data = { ...formData, unitPrice: parseFloat(formData.unitPrice), quantity: parseInt(formData.quantity) };
       if (editing) {
@@ -74,6 +78,8 @@ const Inventory = () => {
       loadItems();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Operation failed');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -90,8 +96,10 @@ const Inventory = () => {
 
   const handleStockAdjust = async (e) => {
     e.preventDefault();
+    if (adjusting) return;
     const adj = parseInt(stockModal.adjustment);
     if (isNaN(adj) || adj === 0) { toast.error('Enter a valid adjustment value'); return; }
+    setAdjusting(true);
     try {
       await inventoryApi.adjustStock(stockModal.item._id, adj);
       toast.success(`Stock ${adj > 0 ? 'added' : 'removed'} successfully`);
@@ -99,6 +107,8 @@ const Inventory = () => {
       loadItems();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Stock adjustment failed');
+    } finally {
+      setAdjusting(false);
     }
   };
 
@@ -272,7 +282,7 @@ const Inventory = () => {
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="btn-secondary">Cancel</button>
-            <button type="submit" className="btn-primary">{editing ? 'Update' : 'Add Item'}</button>
+            <button type="submit" disabled={submitting} className="btn-primary disabled:opacity-50">{submitting ? 'Saving...' : (editing ? 'Update' : 'Add Item')}</button>
           </div>
         </form>
       </Modal>
@@ -300,7 +310,7 @@ const Inventory = () => {
             )}
             <div className="flex justify-end gap-3 pt-4 border-t">
               <button type="button" onClick={() => setStockModal(null)} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary">Apply Adjustment</button>
+              <button type="submit" disabled={adjusting} className="btn-primary disabled:opacity-50">{adjusting ? 'Applying...' : 'Apply Adjustment'}</button>
             </div>
           </form>
         )}

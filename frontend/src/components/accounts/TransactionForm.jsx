@@ -1,6 +1,6 @@
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, PAYMENT_MODES } from '../../api/accountsApi';
 
-const TransactionForm = ({ formData, setFormData, institutions, onSubmit, onCancel, editing }) => {
+const TransactionForm = ({ formData, setFormData, institutions, onSubmit, onCancel, editing, submitting }) => {
   const categories = formData.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   const handleTypeChange = (type) => {
@@ -76,7 +76,7 @@ const TransactionForm = ({ formData, setFormData, institutions, onSubmit, onCanc
       </div>
       <div className="flex justify-end gap-3 pt-4 border-t">
         <button type="button" onClick={onCancel} className="btn-secondary">Cancel</button>
-        <button type="submit" className="btn-primary">{editing ? 'Update' : 'Add'} Transaction</button>
+        <button type="submit" disabled={submitting} className="btn-primary disabled:opacity-50">{submitting ? 'Saving...' : `${editing ? 'Update' : 'Add'} Transaction`}</button>
       </div>
     </form>
   );

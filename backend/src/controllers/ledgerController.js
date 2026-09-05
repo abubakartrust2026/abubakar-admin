@@ -5,6 +5,7 @@ import LedgerTransaction from '../models/LedgerTransaction.js';
 import Institution from '../models/Institution.js';
 import OpeningBalance from '../models/OpeningBalance.js';
 import { LEDGER_TRANSACTION_TYPE } from '../config/constants.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 // @desc    Get ledger transactions
 // @route   GET /api/ledger/transactions
@@ -37,10 +38,11 @@ export const getTransactions = asyncHandler(async (req, res) => {
   }
 
   if (search) {
+    const searchRegex = escapeRegex(search);
     query.$or = [
-      { description: { $regex: search, $options: 'i' } },
-      { referenceNo: { $regex: search, $options: 'i' } },
-      { remarks: { $regex: search, $options: 'i' } },
+      { description: { $regex: searchRegex, $options: 'i' } },
+      { referenceNo: { $regex: searchRegex, $options: 'i' } },
+      { remarks: { $regex: searchRegex, $options: 'i' } },
     ];
   }
 

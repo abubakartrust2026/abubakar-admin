@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../config/constants.js';
+import { Counter } from './Counter.js';
 
 const paymentSchema = new mongoose.Schema(
   {
@@ -79,18 +80,25 @@ const paymentSchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate payment and receipt numbers before validation
+// Auto-generate payment and receipt numbers before validation (atomic to prevent duplicates)
 paymentSchema.pre('validate', async function (next) {
-  if (!this.paymentNumber) {
-    const count = await mongoose.model('Payment').countDocuments();
-    const year = new Date().getFullYear();
-    this.paymentNumber = `PAY-${year}-${String(count + 1).padStart(5, '0')}`;
-  }
-
-  if (!this.receiptNumber) {
-    const count = await mongoose.model('Payment').countDocuments();
-    const year = new Date().getFullYear();
-    this.receiptNumber = `REC-${year}-${String(count + 1).padStart(5, '0')}`;
+  if (!this.paymentNumber || !this.receiptNumber) {
+    try {
+      const counter = await Counter.findOneAndUpdate(
+        { _id: 'paymentNumber' },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+      );
+      if (!counter) {
+        return next(new Error('Failed to generate payment number'));
+      }
+      const year = new Date().getFullYear();
+      const seq = String(counter.seq).padStart(5, '0');
+      if (!this.paymentNumber) this.paymentNumber = `PAY-${year}-${seq}`;
+      if (!this.receiptNumber) this.receiptNumber = `REC-${year}-${seq}`;
+    } catch (err) {
+      return next(err);
+    }
   }
 
   next();
