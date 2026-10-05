@@ -1,4 +1,5 @@
 import asyncHandler from 'express-async-handler';
+import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
 import Fee from '../models/Fee.js';
 
 // @desc    Get all fee structures
@@ -35,6 +36,8 @@ export const getFeeById = asyncHandler(async (req, res) => {
 export const createFee = asyncHandler(async (req, res) => {
   const fee = await Fee.create(req.body);
 
+  await logAudit(req, { action: 'create', entity: 'Fee', entityId: fee._id, after: snapshot(fee) });
+
   res.status(201).json({
     success: true,
     message: 'Fee structure created successfully',
@@ -53,10 +56,14 @@ export const updateFee = asyncHandler(async (req, res) => {
     throw new Error('Fee structure not found');
   }
 
+  const beforeDoc = snapshot(fee);
+
   const updatedFee = await Fee.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
   });
+
+  await logAudit(req, { action: 'update', entity: 'Fee', entityId: fee._id, ...diffSnapshots(beforeDoc, updatedFee) });
 
   res.status(200).json({
     success: true,
@@ -76,7 +83,8 @@ export const deleteFee = asyncHandler(async (req, res) => {
     throw new Error('Fee structure not found');
   }
 
-  await Fee.findByIdAndDelete(req.params.id);
+  await fee.softDelete(req.user._id);
+  await logAudit(req, { action: 'delete', entity: 'Fee', entityId: fee._id, before: snapshot(fee) });
 
   res.status(200).json({
     success: true,

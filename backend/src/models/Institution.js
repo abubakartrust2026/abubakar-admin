@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 
 const institutionSchema = new mongoose.Schema(
   {
@@ -35,6 +36,8 @@ const institutionSchema = new mongoose.Schema(
 );
 
 institutionSchema.index({ isActive: 1 });
+
+institutionSchema.plugin(softDeletePlugin);
 
 const Institution = mongoose.model('Institution', institutionSchema);
 

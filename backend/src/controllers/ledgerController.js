@@ -1,4 +1,6 @@
 import asyncHandler from 'express-async-handler';
+import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
+import { parsePagination } from '../utils/queryHelpers.js';
 import mongoose from 'mongoose';
 import XLSX from 'xlsx';
 import LedgerTransaction from '../models/LedgerTransaction.js';
@@ -6,6 +8,45 @@ import Institution from '../models/Institution.js';
 import OpeningBalance from '../models/OpeningBalance.js';
 import { LEDGER_TRANSACTION_TYPE } from '../config/constants.js';
 import { escapeRegex } from '../utils/escapeRegex.js';
+
+// Indian financial year (Apr-Mar) for a date, e.g. 2026-05-10 -> "2026-27"
+const getFinancialYearForDate = (date) => {
+  const d = new Date(date);
+  const startYear = d.getUTCMonth() >= 3 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+  return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
+};
+
+const TRANSACTION_FIELDS = [
+  'institution', 'type', 'category', 'date', 'amount',
+  'paymentMode', 'referenceNo', 'description', 'remarks',
+];
+const SORTABLE_FIELDS = ['date', 'amount', 'createdAt', 'type', 'category'];
+
+// Whitelists body fields, validates amount/date and derives financialYear from the date
+const buildTransactionData = (res, body) => {
+  const data = {};
+  TRANSACTION_FIELDS.forEach((f) => {
+    if (body[f] !== undefined) data[f] = body[f] === '' ? undefined : body[f];
+  });
+  if (data.amount !== undefined) {
+    data.amount = Number(data.amount);
+    if (!Number.isFinite(data.amount) || data.amount <= 0) {
+      res.status(400);
+      throw new Error('Amount must be greater than zero');
+    }
+  }
+  if (data.date !== undefined) {
+    if (Number.isNaN(new Date(data.date).getTime())) {
+      res.status(400);
+      throw new Error('Invalid date');
+    }
+    data.financialYear = getFinancialYearForDate(data.date);
+  }
+  return data;
+};
+
+// Prefix cells that Excel would interpret as formulas
+const safeCell = (value) => (typeof value === 'string' && /^[=+\-@\t\r]/.test(value) ? `'${value}` : value);
 
 // @desc    Get ledger transactions
 // @route   GET /api/ledger/transactions
@@ -18,11 +59,10 @@ export const getTransactions = asyncHandler(async (req, res) => {
     category,
     month,
     search,
-    page = 1,
-    limit = 20,
     sortBy = 'date',
     sortOrder = 'desc',
   } = req.query;
+  const { page, limit, skip } = parsePagination(req.query, 20);
 
   const query = {};
   if (institution && institution !== 'all') query.institution = institution;
@@ -47,13 +87,13 @@ export const getTransactions = asyncHandler(async (req, res) => {
   }
 
   const total = await LedgerTransaction.countDocuments(query);
-  const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
+  const sort = { [SORTABLE_FIELDS.includes(sortBy) ? sortBy : 'date']: sortOrder === 'asc' ? 1 : -1 };
 
   const transactions = await LedgerTransaction.find(query)
     .populate('institution', 'name shortName')
     .populate('createdBy', 'firstName lastName')
-    .skip((page - 1) * limit)
-    .limit(parseInt(limit))
+    .skip(skip)
+    .limit(limit)
     .sort(sort);
 
   res.status(200).json({
@@ -61,7 +101,7 @@ export const getTransactions = asyncHandler(async (req, res) => {
     data: transactions,
     pagination: {
       total,
-      page: parseInt(page),
+      page,
       pages: Math.ceil(total / limit),
     },
   });
@@ -88,12 +128,15 @@ export const getTransactionById = asyncHandler(async (req, res) => {
 // @route   POST /api/ledger/transactions
 // @access  Private/Admin
 export const createTransaction = asyncHandler(async (req, res) => {
+  const data = buildTransactionData(res, req.body);
   const transaction = await LedgerTransaction.create({
-    ...req.body,
+    ...data,
     createdBy: req.user._id,
   });
 
   const populated = await LedgerTransaction.findById(transaction._id).populate('institution', 'name shortName');
+
+  await logAudit(req, { action: 'create', entity: 'LedgerTransaction', entityId: transaction._id, after: snapshot(transaction) });
 
   res.status(201).json({
     success: true,
@@ -113,11 +156,15 @@ export const updateTransaction = asyncHandler(async (req, res) => {
     throw new Error('Transaction not found');
   }
 
+  const beforeDoc = snapshot(transaction);
+
   const updated = await LedgerTransaction.findByIdAndUpdate(
     req.params.id,
-    { ...req.body, updatedBy: req.user._id },
+    { ...buildTransactionData(res, req.body), updatedBy: req.user._id },
     { new: true, runValidators: true }
   ).populate('institution', 'name shortName');
+
+  await logAudit(req, { action: 'update', entity: 'LedgerTransaction', entityId: transaction._id, ...diffSnapshots(beforeDoc, updated) });
 
   res.status(200).json({
     success: true,
@@ -137,7 +184,8 @@ export const deleteTransaction = asyncHandler(async (req, res) => {
     throw new Error('Transaction not found');
   }
 
-  await LedgerTransaction.findByIdAndDelete(req.params.id);
+  await transaction.softDelete(req.user._id);
+  await logAudit(req, { action: 'delete', entity: 'LedgerTransaction', entityId: transaction._id, before: snapshot(transaction) });
 
   res.status(200).json({
     success: true,
@@ -175,6 +223,10 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
   const match = { financialYear };
   if (institution && institution !== 'all') {
     match.institution = new mongoose.Types.ObjectId(institution);
+  } else {
+    // Keep income/expense consistent with the opening balance and comparison table (active only)
+    const active = await Institution.find({ isActive: true }).select('_id');
+    match.institution = { $in: active.map((i) => i._id) };
   }
 
   const totals = await LedgerTransaction.aggregate([
@@ -362,14 +414,14 @@ export const exportTransactions = asyncHandler(async (req, res) => {
 
   const rows = transactions.map((t) => ({
     Date: t.date.toISOString().split('T')[0],
-    Institution: t.institution?.name || '',
+    Institution: safeCell(t.institution?.name || ''),
     Type: t.type,
     'Source / Category': t.category,
     Amount: t.amount,
     'Payment Mode': t.paymentMode || '',
-    'Reference No': t.referenceNo || '',
-    Description: t.description,
-    Remarks: t.remarks || '',
+    'Reference No': safeCell(t.referenceNo || ''),
+    Description: safeCell(t.description),
+    Remarks: safeCell(t.remarks || ''),
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -377,6 +429,7 @@ export const exportTransactions = asyncHandler(async (req, res) => {
 
   if (!institution || institution === 'all') {
     const institutions = await Institution.find({ isActive: true }).sort({ sortOrder: 1, name: 1 });
+    const usedNames = new Set(['Transactions']);
     institutions.forEach((inst) => {
       const instRows = transactions
         .filter((t) => t.institution?._id.toString() === inst._id.toString())
@@ -385,10 +438,12 @@ export const exportTransactions = asyncHandler(async (req, res) => {
           Type: t.type,
           'Source / Category': t.category,
           Amount: t.amount,
-          Description: t.description,
-          Remarks: t.remarks || '',
+          Description: safeCell(t.description),
+          Remarks: safeCell(t.remarks || ''),
         }));
-      const sheetName = (inst.shortName || inst.name).substring(0, 31);
+      let sheetName = (inst.shortName || inst.name).replace(/[\\/?*[\]:]/g, ' ').substring(0, 31);
+      for (let n = 2; usedNames.has(sheetName); n++) sheetName = `${sheetName.substring(0, 28)} ${n}`;
+      usedNames.add(sheetName);
       const instWs = XLSX.utils.json_to_sheet(instRows);
       XLSX.utils.book_append_sheet(wb, instWs, sheetName);
     });

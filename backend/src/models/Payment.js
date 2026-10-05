@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../config/constants.js';
 import { Counter } from './Counter.js';
 
@@ -28,7 +29,7 @@ const paymentSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: [true, 'Payment amount is required'],
-      min: [0, 'Payment amount cannot be negative'],
+      min: [0.01, 'Payment amount must be greater than zero'],
     },
     paymentMethod: {
       type: String,
@@ -110,6 +111,8 @@ paymentSchema.index({ student: 1 });
 paymentSchema.index({ parent: 1 });
 paymentSchema.index({ status: 1 });
 paymentSchema.index({ transactionDate: 1 });
+
+paymentSchema.plugin(softDeletePlugin);
 
 const Payment = mongoose.model('Payment', paymentSchema);
 

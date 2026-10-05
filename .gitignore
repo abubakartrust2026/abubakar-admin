@@ -42,3 +42,12 @@ coverage/
 *.pid
 *.seed
 *.pid.lock
+
+# Student/personal data & OS junk
+*.xlsx
+nul
+frontend/.vercel/
+.vercel/
+
+# Local database backups
+backend/backups/

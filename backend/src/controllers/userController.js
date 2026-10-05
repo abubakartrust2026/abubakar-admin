@@ -1,4 +1,6 @@
 import asyncHandler from 'express-async-handler';
+import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
+import { parsePagination } from '../utils/queryHelpers.js';
 import User from '../models/User.js';
 import Student from '../models/Student.js';
 import { escapeRegex } from '../utils/escapeRegex.js';
@@ -7,7 +9,8 @@ import { escapeRegex } from '../utils/escapeRegex.js';
 // @route   GET /api/users
 // @access  Private/Admin
 export const getUsers = asyncHandler(async (req, res) => {
-  const { role, search, page = 1, limit = 10 } = req.query;
+  const { role, search } = req.query;
+  const { page, limit, skip } = parsePagination(req.query, 10);
   const query = {};
 
   if (role) query.role = role;
@@ -23,8 +26,8 @@ export const getUsers = asyncHandler(async (req, res) => {
   const total = await User.countDocuments(query);
   const users = await User.find(query)
     .populate('children', 'firstName lastName class admissionNumber')
-    .skip((page - 1) * limit)
-    .limit(parseInt(limit))
+    .skip(skip)
+    .limit(limit)
     .sort({ createdAt: -1 });
 
   res.status(200).json({
@@ -32,7 +35,7 @@ export const getUsers = asyncHandler(async (req, res) => {
     data: users,
     pagination: {
       total,
-      page: parseInt(page),
+      page,
       pages: Math.ceil(total / limit),
     },
   });
@@ -66,6 +69,8 @@ export const createUser = asyncHandler(async (req, res) => {
 
   const user = await User.create(req.body);
 
+  await logAudit(req, { action: 'create', entity: 'User', entityId: user._id, after: snapshot(user) });
+
   res.status(201).json({
     success: true,
     message: 'User created successfully',
@@ -87,10 +92,21 @@ export const updateUser = asyncHandler(async (req, res) => {
   // Don't allow password update through this route
   delete req.body.password;
 
+  // Admin can't demote or deactivate themselves (would lock them out)
+  if (user._id.toString() === req.user._id.toString() &&
+      ((req.body.role && req.body.role !== user.role) || req.body.isActive === false)) {
+    res.status(400);
+    throw new Error('You cannot change your own role or deactivate your own account');
+  }
+
+  const beforeDoc = snapshot(user);
+
   const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
   });
+
+  await logAudit(req, { action: 'update', entity: 'User', entityId: user._id, ...diffSnapshots(beforeDoc, updatedUser) });
 
   res.status(200).json({
     success: true,
@@ -110,15 +126,27 @@ export const deleteUser = asyncHandler(async (req, res) => {
     throw new Error('User not found');
   }
 
-  if (user.role === 'parent') {
-    const hasStudents = await Student.exists({ parent: user._id });
-    if (hasStudents) {
+  if (user._id.toString() === req.user._id.toString()) {
+    res.status(400);
+    throw new Error('You cannot delete your own account');
+  }
+
+  if (user.role === 'admin') {
+    const adminCount = await User.countDocuments({ role: 'admin' });
+    if (adminCount <= 1) {
       res.status(400);
-      throw new Error('Cannot delete parent with linked students. Reassign or delete students first.');
+      throw new Error('Cannot delete the last admin');
     }
   }
 
-  await User.findByIdAndDelete(req.params.id);
+  // Detach this parent from their students so no student points at a deleted user
+  if (user.role === 'parent' && (await Student.exists({ parent: user._id }))) {
+    res.status(400);
+    throw new Error('Cannot delete a parent who still has students linked. Reassign or remove the students first.');
+  }
+
+  await user.softDelete(req.user._id);
+  await logAudit(req, { action: 'delete', entity: 'User', entityId: user._id, before: snapshot(user) });
 
   res.status(200).json({
     success: true,

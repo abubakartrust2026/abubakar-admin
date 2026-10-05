@@ -1,0 +1,33 @@
+name: Nightly database backup
+
+on:
+  schedule:
+    - cron: '30 20 * * *' # 02:00 IST daily
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Dump database
+        run: npm run backup
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          BACKUP_DIR: ${{ runner.temp }}/backups
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/backups
+          retention-days: 30
+          if-no-files-found: error

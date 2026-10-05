@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 import { FEE_FREQUENCY } from '../config/constants.js';
 
 const feeSchema = new mongoose.Schema(
@@ -39,6 +40,8 @@ const feeSchema = new mongoose.Schema(
 // Indexes
 feeSchema.index({ isActive: 1 });
 feeSchema.index({ 'applicableFor.classes': 1 });
+
+feeSchema.plugin(softDeletePlugin);
 
 const Fee = mongoose.model('Fee', feeSchema);
 

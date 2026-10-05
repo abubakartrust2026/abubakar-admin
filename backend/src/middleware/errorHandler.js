@@ -1,3 +1,5 @@
+import logger from '../utils/logger.js';
+
 /**
  * Custom error handler middleware
  */
@@ -11,29 +13,30 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
+  // Invalid ObjectId / bad cast -> 400 instead of 500
+  if (err.name === 'CastError') {
+    return res.status(400).json({ success: false, message: `Invalid ${err.path || 'value'}` });
+  }
+
+  // Mongoose validation errors -> 400 with readable message
   if (err.name === 'ValidationError') {
     return res.status(400).json({
       success: false,
-      message: Object.values(err.errors)
-        .map((e) => e.message)
-        .join(', '),
+      message: Object.values(err.errors).map((e) => e.message).join(', '),
     });
   }
-
-  if (err.name === 'CastError') {
-    return res.status(400).json({
-      success: false,
-      message: `Invalid ${err.path}: ${err.value}`,
-    });
-  }
-
-  console.error('Error:', err.message);
 
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  const isServerError = statusCode >= 500;
+
+  // 5xx: full error with stack for debugging; 4xx: just a warning line (expected client errors)
+  const ctx = { requestId: req.id, userId: req.user?._id, method: req.method, url: req.originalUrl, statusCode };
+  if (isServerError) logger.error({ ...ctx, err }, err.message);
+  else logger.warn(ctx, err.message);
 
   res.status(statusCode).json({
     success: false,
-    message: err.message,
+    message: isServerError && process.env.NODE_ENV !== 'development' ? 'Internal server error' : err.message,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 import { LEDGER_TRANSACTION_TYPE, INCOME_CATEGORY, EXPENSE_CATEGORY, LEDGER_PAYMENT_MODE } from '../config/constants.js';
 
 const ledgerTransactionSchema = new mongoose.Schema(
@@ -79,6 +80,8 @@ ledgerTransactionSchema.pre('validate', function (next) {
 ledgerTransactionSchema.index({ institution: 1, financialYear: 1, date: -1 });
 ledgerTransactionSchema.index({ type: 1, category: 1 });
 ledgerTransactionSchema.index({ date: -1 });
+
+ledgerTransactionSchema.plugin(softDeletePlugin);
 
 const LedgerTransaction = mongoose.model('LedgerTransaction', ledgerTransactionSchema);
 
