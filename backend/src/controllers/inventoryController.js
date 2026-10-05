@@ -77,27 +77,34 @@ export const adjustStock = asyncHandler(async (req, res) => {
     throw new Error('Adjustment value is required');
   }
 
-  const item = await InventoryItem.findById(req.params.id);
+  const delta = parseInt(adjustment);
 
+  // Atomic: the quantity floor is enforced by the DB filter itself, so two
+  // concurrent adjustments can't both read the same starting quantity and
+  // silently overwrite one another's decrement/increment.
+  const updated = await InventoryItem.findOneAndUpdate(
+    { _id: req.params.id, quantity: { $gte: -delta } },
+    { $inc: { quantity: delta } },
+    { new: true }
+  );
+
+  if (updated) {
+    res.status(200).json({
+      success: true,
+      message: 'Stock adjusted successfully',
+      data: updated,
+    });
+    return;
+  }
+
+  const item = await InventoryItem.findById(req.params.id);
   if (!item) {
     res.status(404);
     throw new Error('Inventory item not found');
   }
 
-  const newQuantity = item.quantity + parseInt(adjustment);
-  if (newQuantity < 0) {
-    res.status(400);
-    throw new Error('Insufficient stock');
-  }
-
-  item.quantity = newQuantity;
-  await item.save();
-
-  res.status(200).json({
-    success: true,
-    message: 'Stock adjusted successfully',
-    data: item,
-  });
+  res.status(400);
+  throw new Error('Insufficient stock');
 });
 
 // @desc    Delete inventory item

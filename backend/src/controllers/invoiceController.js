@@ -3,6 +3,7 @@ import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import Student from '../models/Student.js';
 import { syncInvoiceCounter } from '../utils/invoiceCounter.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 // @desc    Get all invoices
 // @route   GET /api/invoices
@@ -16,15 +17,16 @@ export const getInvoices = asyncHandler(async (req, res) => {
   if (parentId) query.parent = parentId;
 
   if (search) {
+    const searchRegex = escapeRegex(search);
     const matchingStudents = await Student.find({
       $or: [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: searchRegex, $options: 'i' } },
+        { lastName: { $regex: searchRegex, $options: 'i' } },
       ],
     }).select('_id');
 
     query.$or = [
-      { invoiceNumber: { $regex: search, $options: 'i' } },
+      { invoiceNumber: { $regex: searchRegex, $options: 'i' } },
       { student: { $in: matchingStudents.map((s) => s._id) } },
     ];
   }

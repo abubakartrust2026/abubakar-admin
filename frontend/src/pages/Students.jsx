@@ -21,6 +21,7 @@ const Students = () => {
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [parents, setParents] = useState([]);
   const [showAddParent, setShowAddParent] = useState(false);
   const [parentFormData, setParentFormData] = useState({
@@ -76,6 +77,8 @@ const Students = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       if (editingStudent) {
         await studentApi.update(editingStudent._id, formData);
@@ -89,6 +92,8 @@ const Students = () => {
       dispatch(fetchStudents({ page, limit: 10, search, class: classFilter }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Operation failed');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -459,7 +464,7 @@ const Students = () => {
 
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => { setShowForm(false); resetForm(); }} className="btn-secondary">Cancel</button>
-            <button type="submit" className="btn-primary">{editingStudent ? 'Update' : 'Create'} Student</button>
+            <button type="submit" disabled={submitting} className="btn-primary disabled:opacity-50">{submitting ? 'Saving...' : `${editingStudent ? 'Update' : 'Create'} Student`}</button>
           </div>
         </form>
       </Modal>

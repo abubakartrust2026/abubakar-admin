@@ -45,6 +45,7 @@ const Invoices = () => {
   const [editing, setEditing] = useState(null);
   const [invoiceMode, setInvoiceMode] = useState('single'); // 'single' | 'bulk'
   const [submitting, setSubmitting] = useState(false);
+  const [sharingInvoiceId, setSharingInvoiceId] = useState(null);
   const [students, setStudents] = useState([]);
   const [studentSearch, setStudentSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -139,6 +140,7 @@ const Invoices = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
     setSubmitting(true);
     try {
       if (invoiceMode === 'single') {
@@ -207,11 +209,13 @@ const Invoices = () => {
   };
 
   const handleWhatsAppShare = (invoice) => {
+    if (sharingInvoiceId === invoice._id) return;
     const phone = invoice.parent?.phone;
     if (!phone) {
       toast.error('Parent phone number not available');
       return;
     }
+    setSharingInvoiceId(invoice._id);
     let cleanPhone = phone.replace(/[^0-9]/g, '');
     if (!cleanPhone.startsWith('91')) cleanPhone = '91' + cleanPhone;
     const items = invoice.items?.map(item => `- ${item.description}: ${formatCurrency(item.amount)}`).join('\n') || '';
@@ -231,6 +235,7 @@ ${items}
 Thank you,
 Abubakar English School`;
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
+    setSharingInvoiceId(null);
   };
 
   const handleViewInvoice = async (id) => {
@@ -400,7 +405,8 @@ Abubakar English School`;
             {isAdmin && (
               <div className="flex justify-end">
                 <button onClick={() => handleWhatsAppShare(viewInvoice)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium">
+                  disabled={sharingInvoiceId === viewInvoice._id}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium disabled:opacity-50">
                   <FaWhatsapp className="h-4 w-4" /> Share on WhatsApp
                 </button>
               </div>

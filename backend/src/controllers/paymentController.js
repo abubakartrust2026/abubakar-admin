@@ -3,6 +3,12 @@ import Payment from '../models/Payment.js';
 import Invoice from '../models/Invoice.js';
 import Student from '../models/Student.js';
 import { PAYMENT_METHOD } from '../config/constants.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
+
+// Number of times to re-fetch the invoice and retry invoice.save() when a
+// concurrent payment updates it first (Mongoose optimistic-concurrency
+// VersionError). 2 attempts total = 1 retry.
+const MAX_INVOICE_SAVE_ATTEMPTS = 2;
 
 // Records a single payment against an already-fetched invoice, validating the
 // amount against what's currently due and updating the invoice's paid status.
@@ -25,13 +31,40 @@ const recordPaymentForInvoice = async (invoice, paymentData, userId) => {
     receivedBy: userId,
   });
 
-  const newTotalPaid = totalPaid + paymentData.amount;
-  if (newTotalPaid >= invoice.total) {
-    invoice.status = 'paid';
-  } else if (newTotalPaid > 0) {
-    invoice.status = 'partially_paid';
+  // The check above isn't atomic with the create, so a concurrent payment on
+  // the same invoice could have landed in between. Recheck against every
+  // completed payment (this one included) before finalizing the invoice, and
+  // undo this payment rather than silently allow the invoice to be overpaid.
+  let currentInvoice = invoice;
+  for (let attempt = 1; ; attempt += 1) {
+    const paidSoFar = (await Payment.find({ invoice: invoice._id, status: 'completed' })).reduce(
+      (sum, p) => sum + p.amount,
+      0
+    );
+
+    if (paidSoFar > currentInvoice.total) {
+      await Payment.findByIdAndDelete(payment._id);
+      throw new Error('Payment could not be recorded: a concurrent payment already covers the amount due');
+    }
+
+    if (paidSoFar >= currentInvoice.total) {
+      currentInvoice.status = 'paid';
+    } else if (paidSoFar > 0) {
+      currentInvoice.status = 'partially_paid';
+    }
+
+    try {
+      await currentInvoice.save();
+      break;
+    } catch (err) {
+      if (err.name === 'VersionError' && attempt < MAX_INVOICE_SAVE_ATTEMPTS) {
+        currentInvoice = await Invoice.findById(invoice._id);
+        continue;
+      }
+      await Payment.findByIdAndDelete(payment._id);
+      throw err;
+    }
   }
-  await invoice.save();
 
   return Payment.findById(payment._id)
     .populate('student', 'firstName lastName class admissionNumber')
@@ -51,15 +84,16 @@ export const getPayments = asyncHandler(async (req, res) => {
   if (status) query.status = status;
 
   if (search) {
+    const searchRegex = escapeRegex(search);
     const matchingStudents = await Student.find({
       $or: [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: searchRegex, $options: 'i' } },
+        { lastName: { $regex: searchRegex, $options: 'i' } },
       ],
     }).select('_id');
 
     query.$or = [
-      { receiptNumber: { $regex: search, $options: 'i' } },
+      { receiptNumber: { $regex: searchRegex, $options: 'i' } },
       { student: { $in: matchingStudents.map((s) => s._id) } },
     ];
   }

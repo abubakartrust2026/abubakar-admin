@@ -1,6 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import Student from '../models/Student.js';
 import User from '../models/User.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 const CLASS_ORDER = ['Jr. KG', 'Sr. KG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 
@@ -15,10 +16,11 @@ export const getStudents = asyncHandler(async (req, res) => {
   if (section) query.section = section;
   if (status) query.status = status;
   if (search) {
+    const searchRegex = escapeRegex(search);
     query.$or = [
-      { firstName: { $regex: search, $options: 'i' } },
-      { lastName: { $regex: search, $options: 'i' } },
-      { admissionNumber: { $regex: search, $options: 'i' } },
+      { firstName: { $regex: searchRegex, $options: 'i' } },
+      { lastName: { $regex: searchRegex, $options: 'i' } },
+      { admissionNumber: { $regex: searchRegex, $options: 'i' } },
     ];
   }
 
