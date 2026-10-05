@@ -13,38 +13,32 @@ export const protect = asyncHandler(async (req, res, next) => {
     req.headers.authorization &&
     req.headers.authorization.startsWith('Bearer')
   ) {
+    token = req.headers.authorization.split(' ')[1];
+
     try {
-      // Get token from header
-      token = req.headers.authorization.split(' ')[1];
-
-      // Verify token
       const decoded = verifyAccessToken(token);
-
-      // Get user from token (exclude password)
       req.user = await User.findById(decoded.id).select('-password');
-
-      if (!req.user) {
-        res.status(401);
-        throw new Error('User not found');
-      }
-
-      if (!req.user.isActive) {
-        res.status(401);
-        throw new Error('User account is not active');
-      }
-
-      next();
     } catch (error) {
       console.error('Auth middleware error:', error.message);
       res.status(401);
       throw new Error('Not authorized, token failed');
     }
+
+    if (!req.user) {
+      res.status(401);
+      throw new Error('User not found');
+    }
+
+    if (!req.user.isActive) {
+      res.status(401);
+      throw new Error('User account is not active');
+    }
+
+    return next();
   }
 
-  if (!token) {
-    res.status(401);
-    throw new Error('Not authorized, no token');
-  }
+  res.status(401);
+  throw new Error('Not authorized, no token');
 });
 
 /**

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 import { ATTENDANCE_STATUS } from '../config/constants.js';
 
 const attendanceSchema = new mongoose.Schema(
@@ -40,6 +41,8 @@ attendanceSchema.index({ status: 1 });
 attendanceSchema.methods.isPresent = function () {
   return this.status === ATTENDANCE_STATUS.PRESENT;
 };
+
+attendanceSchema.plugin(softDeletePlugin);
 
 const Attendance = mongoose.model('Attendance', attendanceSchema);
 

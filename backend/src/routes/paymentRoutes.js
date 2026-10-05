@@ -1,5 +1,5 @@
 import express from 'express';
-import { getPayments, getPaymentById, createPayment, bulkCreatePayments, updatePayment } from '../controllers/paymentController.js';
+import { getPayments, getPaymentById, createPayment, bulkCreatePayments, updatePayment, deletePayment } from '../controllers/paymentController.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -14,6 +14,7 @@ router.post('/bulk', authorize('admin'), bulkCreatePayments);
 
 router.route('/:id')
   .get(getPaymentById)
-  .put(authorize('admin'), updatePayment);
+  .put(authorize('admin'), updatePayment)
+  .delete(authorize('admin'), deletePayment);
 
 export default router;

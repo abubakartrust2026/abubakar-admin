@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 import bcrypt from 'bcryptjs';
 import { USER_ROLES } from '../config/constants.js';
 
@@ -108,6 +109,8 @@ userSchema.methods.toPublicJSON = function () {
 
 // Index for faster queries
 userSchema.index({ role: 1 });
+
+userSchema.plugin(softDeletePlugin);
 
 const User = mongoose.model('User', userSchema);
 

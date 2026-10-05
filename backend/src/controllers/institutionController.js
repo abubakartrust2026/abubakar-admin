@@ -1,4 +1,5 @@
 import asyncHandler from 'express-async-handler';
+import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
 import Institution from '../models/Institution.js';
 import LedgerTransaction from '../models/LedgerTransaction.js';
 import OpeningBalance from '../models/OpeningBalance.js';
@@ -45,6 +46,8 @@ export const createInstitution = asyncHandler(async (req, res) => {
     createdBy: req.user._id,
   });
 
+  await logAudit(req, { action: 'create', entity: 'Institution', entityId: institution._id, after: snapshot(institution) });
+
   res.status(201).json({
     success: true,
     message: 'Institution created successfully',
@@ -63,10 +66,14 @@ export const updateInstitution = asyncHandler(async (req, res) => {
     throw new Error('Institution not found');
   }
 
+  const beforeDoc = snapshot(institution);
+
   const updated = await Institution.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
   });
+
+  await logAudit(req, { action: 'update', entity: 'Institution', entityId: institution._id, ...diffSnapshots(beforeDoc, updated) });
 
   res.status(200).json({
     success: true,
@@ -94,7 +101,8 @@ export const deleteInstitution = asyncHandler(async (req, res) => {
     throw new Error('Cannot delete institution with existing transactions or opening balances. Deactivate it instead.');
   }
 
-  await Institution.findByIdAndDelete(req.params.id);
+  await institution.softDelete(req.user._id);
+  await logAudit(req, { action: 'delete', entity: 'Institution', entityId: institution._id, before: snapshot(institution) });
 
   res.status(200).json({
     success: true,

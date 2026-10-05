@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 
 const ITEM_CATEGORY = ['books', 'drawing_book', 'uniform', 'notebooks', 'scarf_cap', 'other'];
 
@@ -61,5 +62,7 @@ inventoryItemSchema.index({ category: 1 });
 inventoryItemSchema.index({ isActive: 1 });
 
 export const INVENTORY_CATEGORIES = ITEM_CATEGORY;
+inventoryItemSchema.plugin(softDeletePlugin);
+
 const InventoryItem = mongoose.model('InventoryItem', inventoryItemSchema);
 export default InventoryItem;

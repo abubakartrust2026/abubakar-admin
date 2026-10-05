@@ -11,7 +11,9 @@
     "seed:institutions": "node src/seeders/seedInstitutions.js",
     "mark-invoices-paid": "node src/seeders/markInvoicesPaid.js",
     "import:students-fees-excel": "node src/seeders/importStudentsFeesFromExcel.js",
-    "test": "jest --coverage"
+    "test": "jest --coverage",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js"
   },
   "keywords": [
     "school",
@@ -34,6 +36,8 @@
     "morgan": "^1.10.0",
     "nodemailer": "^8.0.1",
     "pdfkit": "^0.14.0",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

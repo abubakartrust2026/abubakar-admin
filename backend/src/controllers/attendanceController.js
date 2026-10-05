@@ -1,4 +1,6 @@
 import asyncHandler from 'express-async-handler';
+import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
+import { parsePagination } from '../utils/queryHelpers.js';
 import Attendance from '../models/Attendance.js';
 import Student from '../models/Student.js';
 import { notifyParentsOfAttendance } from '../utils/whatsappService.js';
@@ -7,17 +9,19 @@ import { notifyParentsOfAttendance } from '../utils/whatsappService.js';
 // @route   GET /api/attendance
 // @access  Private/Admin
 export const getAttendance = asyncHandler(async (req, res) => {
-  const { studentId, date, startDate, endDate, status, class: studentClass, page = 1, limit = 50 } = req.query;
+  const { studentId, date, startDate, endDate, status, class: studentClass } = req.query;
+  const { page, limit, skip } = parsePagination(req.query, 50);
   const query = {};
 
   if (studentId) query.student = studentId;
   if (status) query.status = status;
 
   if (date) {
+    // Date-only values are stored as UTC midnight; use UTC so server timezone doesn't shift the day
     const d = new Date(date);
     query.date = {
-      $gte: new Date(d.setHours(0, 0, 0, 0)),
-      $lte: new Date(d.setHours(23, 59, 59, 999)),
+      $gte: new Date(d.setUTCHours(0, 0, 0, 0)),
+      $lte: new Date(d.setUTCHours(23, 59, 59, 999)),
     };
   } else if (startDate && endDate) {
     query.date = {
@@ -36,8 +40,8 @@ export const getAttendance = asyncHandler(async (req, res) => {
   const records = await Attendance.find(query)
     .populate('student', 'firstName lastName class section rollNumber admissionNumber')
     .populate('markedBy', 'firstName lastName')
-    .skip((page - 1) * limit)
-    .limit(parseInt(limit))
+    .skip(skip)
+    .limit(limit)
     .sort({ date: -1, 'student.rollNumber': 1 });
 
   res.status(200).json({
@@ -45,7 +49,7 @@ export const getAttendance = asyncHandler(async (req, res) => {
     data: records,
     pagination: {
       total,
-      page: parseInt(page),
+      page,
       pages: Math.ceil(total / limit),
     },
   });
@@ -59,20 +63,32 @@ export const markAttendance = asyncHandler(async (req, res) => {
 
   // Normalize date to start of day
   const attendanceDate = new Date(date);
-  attendanceDate.setHours(0, 0, 0, 0);
+  attendanceDate.setUTCHours(0, 0, 0, 0);
 
   // Check if attendance already exists for this student on this date
   const existing = await Attendance.findOne({
     student,
     date: attendanceDate,
-  });
+  }).setOptions({ withDeleted: true });
 
   if (existing) {
-    // Update existing record
+    // Update existing record (or revive one that was soft-deleted)
+    const beforeDoc = snapshot(existing);
+    const wasDeleted = existing.isDeleted;
+    existing.isDeleted = false;
+    existing.deletedAt = undefined;
+    existing.deletedBy = undefined;
     existing.status = status;
     existing.remarks = remarks;
     existing.markedBy = req.user._id;
     await existing.save();
+
+    await logAudit(req, {
+      action: wasDeleted ? 'restore' : 'update',
+      entity: 'Attendance',
+      entityId: existing._id,
+      ...diffSnapshots(beforeDoc, existing),
+    });
 
     const populated = await Attendance.findById(existing._id)
       .populate({ path: 'student', select: 'firstName lastName class section rollNumber parent', populate: { path: 'parent', select: 'phone' } })
@@ -94,6 +110,8 @@ export const markAttendance = asyncHandler(async (req, res) => {
     remarks,
     markedBy: req.user._id,
   });
+
+  await logAudit(req, { action: 'create', entity: 'Attendance', entityId: attendance._id, after: snapshot(attendance) });
 
   const populated = await Attendance.findById(attendance._id)
     .populate({ path: 'student', select: 'firstName lastName class section rollNumber parent', populate: { path: 'parent', select: 'phone' } })
@@ -121,22 +139,28 @@ export const bulkMarkAttendance = asyncHandler(async (req, res) => {
   }
 
   const attendanceDate = new Date(date);
-  attendanceDate.setHours(0, 0, 0, 0);
+  attendanceDate.setUTCHours(0, 0, 0, 0);
 
   const results = [];
+  const changes = []; // one audit entry for the whole batch, listing only what actually changed
 
   for (const record of records) {
     const existing = await Attendance.findOne({
       student: record.student,
       date: attendanceDate,
-    });
+    }).setOptions({ withDeleted: true });
 
     if (existing) {
+      const previousStatus = existing.isDeleted ? null : existing.status;
+      existing.isDeleted = false;
+      existing.deletedAt = undefined;
+      existing.deletedBy = undefined;
       existing.status = record.status;
       existing.remarks = record.remarks;
       existing.markedBy = req.user._id;
       await existing.save();
       results.push(existing);
+      if (previousStatus !== record.status) changes.push({ student: record.student, from: previousStatus, to: record.status });
     } else {
       const attendance = await Attendance.create({
         student: record.student,
@@ -146,8 +170,15 @@ export const bulkMarkAttendance = asyncHandler(async (req, res) => {
         markedBy: req.user._id,
       });
       results.push(attendance);
+      changes.push({ student: record.student, from: null, to: record.status });
     }
   }
+
+  await logAudit(req, {
+    action: 'bulk_update',
+    entity: 'Attendance',
+    meta: { date: attendanceDate, submitted: records.length, changed: changes.length, changes },
+  });
 
   await Attendance.populate(results, { path: 'student', select: 'firstName lastName class section rollNumber parent', populate: { path: 'parent', select: 'phone' } });
   const notificationSummary = await notifyParentsOfAttendance(results);
@@ -170,7 +201,7 @@ export const getAttendanceByStudent = asyncHandler(async (req, res) => {
   // Check parent access
   if (req.user.role === 'parent') {
     const student = await Student.findById(req.params.studentId);
-    if (!student || student.parent.toString() !== req.user._id.toString()) {
+    if (!student || student.parent?.toString() !== req.user._id.toString()) {
       res.status(403);
       throw new Error('Not authorized to view this student\'s attendance');
     }
@@ -196,7 +227,7 @@ export const getAttendanceSummary = asyncHandler(async (req, res) => {
 
   if (req.user.role === 'parent') {
     const student = await Student.findById(req.params.studentId);
-    if (!student || student.parent.toString() !== req.user._id.toString()) {
+    if (!student || student.parent?.toString() !== req.user._id.toString()) {
       res.status(403);
       throw new Error('Not authorized');
     }
@@ -233,7 +264,8 @@ export const deleteAttendance = asyncHandler(async (req, res) => {
     throw new Error('Attendance record not found');
   }
 
-  await Attendance.findByIdAndDelete(req.params.id);
+  await record.softDelete(req.user._id);
+  await logAudit(req, { action: 'delete', entity: 'Attendance', entityId: record._id, before: snapshot(record) });
 
   res.status(200).json({
     success: true,

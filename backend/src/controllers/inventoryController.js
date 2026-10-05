@@ -1,4 +1,5 @@
 import asyncHandler from 'express-async-handler';
+import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
 import InventoryItem from '../models/InventoryItem.js';
 
 // @desc    Get all inventory items
@@ -36,6 +37,8 @@ export const getInventoryItemById = asyncHandler(async (req, res) => {
 export const createInventoryItem = asyncHandler(async (req, res) => {
   const item = await InventoryItem.create(req.body);
 
+  await logAudit(req, { action: 'create', entity: 'InventoryItem', entityId: item._id, after: snapshot(item) });
+
   res.status(201).json({
     success: true,
     message: 'Inventory item created successfully',
@@ -54,10 +57,14 @@ export const updateInventoryItem = asyncHandler(async (req, res) => {
     throw new Error('Inventory item not found');
   }
 
+  const beforeDoc = snapshot(item);
+
   const updated = await InventoryItem.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
   });
+
+  await logAudit(req, { action: 'update', entity: 'InventoryItem', entityId: item._id, ...diffSnapshots(beforeDoc, updated) });
 
   res.status(200).json({
     success: true,
@@ -90,8 +97,18 @@ export const adjustStock = asyncHandler(async (req, res) => {
     throw new Error('Insufficient stock');
   }
 
+  const previousQuantity = item.quantity;
   item.quantity = newQuantity;
   await item.save();
+
+  await logAudit(req, {
+    action: 'update',
+    entity: 'InventoryItem',
+    entityId: item._id,
+    before: { quantity: previousQuantity },
+    after: { quantity: newQuantity },
+    meta: { adjustment: parseInt(adjustment) },
+  });
 
   res.status(200).json({
     success: true,
@@ -111,7 +128,8 @@ export const deleteInventoryItem = asyncHandler(async (req, res) => {
     throw new Error('Inventory item not found');
   }
 
-  await InventoryItem.findByIdAndDelete(req.params.id);
+  await item.softDelete(req.user._id);
+  await logAudit(req, { action: 'delete', entity: 'InventoryItem', entityId: item._id, before: snapshot(item) });
 
   res.status(200).json({
     success: true,

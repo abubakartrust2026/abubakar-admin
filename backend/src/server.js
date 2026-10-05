@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import pinoHttp from 'pino-http';
+import { randomUUID } from 'crypto';
+import logger from './utils/logger.js';
 import rateLimit from 'express-rate-limit';
 import connectDB from './config/db.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
@@ -21,6 +24,7 @@ import inventoryRoutes from './routes/inventoryRoutes.js';
 import institutionRoutes from './routes/institutionRoutes.js';
 import openingBalanceRoutes from './routes/openingBalanceRoutes.js';
 import ledgerRoutes from './routes/ledgerRoutes.js';
+import auditRoutes from './routes/auditRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -34,12 +38,21 @@ const app = express();
 // Security Middleware
 app.use(helmet());
 
-// Rate limiting
+// Behind Vercel/proxy: use the real client IP, otherwise all users share one rate-limit bucket
+app.set('trust proxy', 1);
+
+// Rate limiting: generous for the app, strict only for login attempts
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests from this IP, please try again later.',
+  max: 1000,
+  message: { success: false, message: 'Too many requests, please try again later.' },
 });
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: 'Too many login attempts, please try again later.' },
+});
+app.use('/api/auth/login', loginLimiter);
 app.use('/api/', limiter);
 
 // CORS configuration
@@ -62,10 +75,24 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Logging middleware
+// Logging middleware: readable output in dev, structured JSON (with request id) otherwise
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
+app.use(pinoHttp({
+  logger,
+  genReqId: (req, res) => {
+    const id = req.headers['x-request-id'] || randomUUID();
+    res.setHeader('X-Request-Id', id);
+    return id;
+  },
+  autoLogging: { ignore: (req) => req.url === '/' },
+  customLogLevel: (req, res, err) => (err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info'),
+  serializers: {
+    req: (req) => ({ id: req.id, method: req.method, url: req.url, ip: req.remoteAddress }),
+    res: (res) => ({ statusCode: res.statusCode }),
+  },
+}));
 
 // Health check
 app.get('/', (req, res) => {
@@ -90,6 +117,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/institutions', institutionRoutes);
 app.use('/api/opening-balances', openingBalanceRoutes);
 app.use('/api/ledger', ledgerRoutes);
+app.use('/api/audit-logs', auditRoutes);
 
 // Error handling
 app.use(notFound);

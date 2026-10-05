@@ -1,4 +1,6 @@
 import asyncHandler from 'express-async-handler';
+import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
+import { escapeRegex, parsePagination } from '../utils/queryHelpers.js';
 import Student from '../models/Student.js';
 import User from '../models/User.js';
 
@@ -8,7 +10,8 @@ const CLASS_ORDER = ['Jr. KG', 'Sr. KG', '1', '2', '3', '4', '5', '6', '7', '8',
 // @route   GET /api/students
 // @access  Private/Admin
 export const getStudents = asyncHandler(async (req, res) => {
-  const { class: studentClass, section, status, search, page = 1, limit = 10 } = req.query;
+  const { class: studentClass, section, status, search } = req.query;
+  const { page, limit, skip } = parsePagination(req.query, 10);
   const query = {};
 
   if (studentClass) query.class = studentClass;
@@ -16,17 +19,17 @@ export const getStudents = asyncHandler(async (req, res) => {
   if (status) query.status = status;
   if (search) {
     query.$or = [
-      { firstName: { $regex: search, $options: 'i' } },
-      { lastName: { $regex: search, $options: 'i' } },
-      { admissionNumber: { $regex: search, $options: 'i' } },
+      { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+      { lastName: { $regex: escapeRegex(search), $options: 'i' } },
+      { admissionNumber: { $regex: escapeRegex(search), $options: 'i' } },
     ];
   }
 
   const total = await Student.countDocuments(query);
   const students = await Student.find(query)
     .populate('parent', 'firstName lastName email phone')
-    .skip((page - 1) * limit)
-    .limit(parseInt(limit))
+    .skip(skip)
+    .limit(limit)
     .sort({ createdAt: -1 });
 
   res.status(200).json({
@@ -34,7 +37,7 @@ export const getStudents = asyncHandler(async (req, res) => {
     data: students,
     pagination: {
       total,
-      page: parseInt(page),
+      page,
       pages: Math.ceil(total / limit),
     },
   });
@@ -53,7 +56,7 @@ export const getStudentById = asyncHandler(async (req, res) => {
   }
 
   // Parents can only view their own children
-  if (req.user.role === 'parent' && student.parent._id.toString() !== req.user._id.toString()) {
+  if (req.user.role === 'parent' && student.parent?._id?.toString() !== req.user._id.toString()) {
     res.status(403);
     throw new Error('Not authorized to view this student');
   }
@@ -93,6 +96,8 @@ export const createStudent = asyncHandler(async (req, res) => {
   const populatedStudent = await Student.findById(student._id)
     .populate('parent', 'firstName lastName email phone');
 
+  await logAudit(req, { action: 'create', entity: 'Student', entityId: student._id, after: snapshot(student) });
+
   res.status(201).json({
     success: true,
     message: 'Student created successfully',
@@ -112,19 +117,30 @@ export const updateStudent = asyncHandler(async (req, res) => {
   }
 
   // If parent is changing, update both old and new parent's children arrays
-  if (req.body.parent && req.body.parent !== student.parent.toString()) {
-    await User.findByIdAndUpdate(student.parent, {
-      $pull: { children: student._id },
-    });
+  if (req.body.parent && req.body.parent !== student.parent?.toString()) {
+    const newParent = await User.findById(req.body.parent);
+    if (!newParent || newParent.role !== 'parent') {
+      res.status(400);
+      throw new Error('Invalid parent reference');
+    }
+    if (student.parent) {
+      await User.findByIdAndUpdate(student.parent, {
+        $pull: { children: student._id },
+      });
+    }
     await User.findByIdAndUpdate(req.body.parent, {
       $addToSet: { children: student._id },
     });
   }
 
+  const beforeDoc = snapshot(student);
+
   student = await Student.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
   }).populate('parent', 'firstName lastName email phone');
+
+  await logAudit(req, { action: 'update', entity: 'Student', entityId: student._id, ...diffSnapshots(beforeDoc, student) });
 
   res.status(200).json({
     success: true,
@@ -151,7 +167,8 @@ export const deleteStudent = asyncHandler(async (req, res) => {
     });
   }
 
-  await Student.findByIdAndDelete(req.params.id);
+  await student.softDelete(req.user._id);
+  await logAudit(req, { action: 'delete', entity: 'Student', entityId: student._id, before: snapshot(student) });
 
   res.status(200).json({
     success: true,
@@ -206,6 +223,10 @@ export const promoteStudents = asyncHandler(async (req, res) => {
   const toClass = isLastClass ? null : CLASS_ORDER[currentIndex + 1];
 
   const filter = { class: fromClass, status: 'active' };
+  if (studentIds !== undefined && !Array.isArray(studentIds)) {
+    res.status(400);
+    throw new Error('studentIds must be an array');
+  }
   if (studentIds && studentIds.length > 0) {
     filter._id = { $in: studentIds };
   }
@@ -218,6 +239,12 @@ export const promoteStudents = asyncHandler(async (req, res) => {
   if (resetRollNumber) updateFields.rollNumber = '';
 
   const result = await Student.updateMany(filter, { $set: updateFields });
+
+  await logAudit(req, {
+    action: 'bulk_update',
+    entity: 'Student',
+    meta: { filter, set: updateFields, modifiedCount: result.modifiedCount },
+  });
 
   const message = isLastClass
     ? `${result.modifiedCount} students graduated from Class ${fromClass}`

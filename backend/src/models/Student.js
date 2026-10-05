@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 import { STUDENT_STATUS, GENDER } from '../config/constants.js';
 
 const studentSchema = new mongoose.Schema(
@@ -114,6 +115,8 @@ studentSchema.index({ status: 1 });
 // Ensure virtuals are included in JSON
 studentSchema.set('toJSON', { virtuals: true });
 studentSchema.set('toObject', { virtuals: true });
+
+studentSchema.plugin(softDeletePlugin);
 
 const Student = mongoose.model('Student', studentSchema);
 

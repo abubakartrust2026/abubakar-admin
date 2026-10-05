@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../config/constants.js';
+import { nextPaymentSeq } from '../utils/paymentCounter.js';
 
 const paymentSchema = new mongoose.Schema(
   {
@@ -27,7 +29,7 @@ const paymentSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: [true, 'Payment amount is required'],
-      min: [0, 'Payment amount cannot be negative'],
+      min: [0.01, 'Payment amount must be greater than zero'],
     },
     paymentMethod: {
       type: String,
@@ -79,21 +81,20 @@ const paymentSchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate payment and receipt numbers before validation
+// Auto-generate payment and receipt numbers before validation (atomic counter, no duplicates)
 paymentSchema.pre('validate', async function (next) {
-  if (!this.paymentNumber) {
-    const count = await mongoose.model('Payment').countDocuments();
-    const year = new Date().getFullYear();
-    this.paymentNumber = `PAY-${year}-${String(count + 1).padStart(5, '0')}`;
+  try {
+    if (!this.paymentNumber || !this.receiptNumber) {
+      const seq = await nextPaymentSeq();
+      const year = new Date().getFullYear();
+      const padded = String(seq).padStart(5, '0');
+      if (!this.paymentNumber) this.paymentNumber = `PAY-${year}-${padded}`;
+      if (!this.receiptNumber) this.receiptNumber = `REC-${year}-${padded}`;
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-
-  if (!this.receiptNumber) {
-    const count = await mongoose.model('Payment').countDocuments();
-    const year = new Date().getFullYear();
-    this.receiptNumber = `REC-${year}-${String(count + 1).padStart(5, '0')}`;
-  }
-
-  next();
 });
 
 // Indexes
@@ -102,6 +103,8 @@ paymentSchema.index({ student: 1 });
 paymentSchema.index({ parent: 1 });
 paymentSchema.index({ status: 1 });
 paymentSchema.index({ transactionDate: 1 });
+
+paymentSchema.plugin(softDeletePlugin);
 
 const Payment = mongoose.model('Payment', paymentSchema);
 

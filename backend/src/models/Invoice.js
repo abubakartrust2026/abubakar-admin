@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import softDeletePlugin from '../utils/softDelete.js';
 import { INVOICE_STATUS } from '../config/constants.js';
 import { Counter } from './Counter.js';
 
@@ -129,6 +130,8 @@ invoiceSchema.index({ student: 1 });
 invoiceSchema.index({ parent: 1 });
 invoiceSchema.index({ status: 1 });
 invoiceSchema.index({ dueDate: 1 });
+
+invoiceSchema.plugin(softDeletePlugin);
 
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 

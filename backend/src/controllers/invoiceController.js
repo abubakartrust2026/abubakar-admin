@@ -1,14 +1,36 @@
 import asyncHandler from 'express-async-handler';
+import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
+import { escapeRegex, parsePagination } from '../utils/queryHelpers.js';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import Student from '../models/Student.js';
 import { syncInvoiceCounter } from '../utils/invoiceCounter.js';
 
+// Validates line items and computes subtotal/total. Sets 400 and throws on bad input.
+const calculateTotals = (res, items, tax, discount) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    res.status(400);
+    throw new Error('Invoice must have at least one item');
+  }
+  if (items.some((item) => !Number.isFinite(Number(item.amount)) || Number(item.amount) < 0)) {
+    res.status(400);
+    throw new Error('Invoice item amounts must be valid non-negative numbers');
+  }
+  const subtotal = items.reduce((sum, item) => sum + Number(item.amount), 0);
+  const total = subtotal + tax - discount;
+  if (total < 0) {
+    res.status(400);
+    throw new Error('Discount cannot exceed the invoice subtotal');
+  }
+  return { subtotal, total };
+};
+
 // @desc    Get all invoices
 // @route   GET /api/invoices
 // @access  Private
 export const getInvoices = asyncHandler(async (req, res) => {
-  const { status, studentId, parentId, search, page = 1, limit = 10 } = req.query;
+  const { status, studentId, parentId, search } = req.query;
+  const { page, limit, skip } = parsePagination(req.query, 10);
   const query = {};
 
   if (status) query.status = status;
@@ -18,13 +40,13 @@ export const getInvoices = asyncHandler(async (req, res) => {
   if (search) {
     const matchingStudents = await Student.find({
       $or: [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+        { lastName: { $regex: escapeRegex(search), $options: 'i' } },
       ],
     }).select('_id');
 
     query.$or = [
-      { invoiceNumber: { $regex: search, $options: 'i' } },
+      { invoiceNumber: { $regex: escapeRegex(search), $options: 'i' } },
       { student: { $in: matchingStudents.map((s) => s._id) } },
     ];
   }
@@ -39,8 +61,8 @@ export const getInvoices = asyncHandler(async (req, res) => {
     .populate('student', 'firstName lastName class section admissionNumber')
     .populate('parent', 'firstName lastName email phone')
     .populate('items.fee', 'name')
-    .skip((page - 1) * limit)
-    .limit(parseInt(limit))
+    .skip(skip)
+    .limit(limit)
     .sort({ createdAt: -1 });
 
   res.status(200).json({
@@ -48,7 +70,7 @@ export const getInvoices = asyncHandler(async (req, res) => {
     data: invoices,
     pagination: {
       total,
-      page: parseInt(page),
+      page,
       pages: Math.ceil(total / limit),
     },
   });
@@ -92,16 +114,17 @@ export const getInvoiceById = asyncHandler(async (req, res) => {
 // @route   POST /api/invoices
 // @access  Private/Admin
 export const createInvoice = asyncHandler(async (req, res) => {
-  const { items, tax = 0, discount = 0 } = req.body;
+  const { items } = req.body;
+  const tax = Number(req.body.tax) || 0;
+  const discount = Number(req.body.discount) || 0;
 
-  const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
-  const total = subtotal + tax - discount;
+  const { subtotal, total } = calculateTotals(res, items, tax, discount);
 
   let invoice;
   let lastError;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const data = { ...req.body, subtotal, total };
+      const data = { ...req.body, tax, discount, subtotal, total };
       delete data.invoiceNumber; // always let the pre-validate hook generate it
       invoice = await Invoice.create(data);
       break;
@@ -119,6 +142,8 @@ export const createInvoice = asyncHandler(async (req, res) => {
   const populated = await Invoice.findById(invoice._id)
     .populate('student', 'firstName lastName class section admissionNumber')
     .populate('parent', 'firstName lastName email phone');
+
+  await logAudit(req, { action: 'create', entity: 'Invoice', entityId: invoice._id, after: snapshot(populated) });
 
   res.status(201).json({
     success: true,
@@ -151,10 +176,22 @@ export const updateInvoice = asyncHandler(async (req, res) => {
   }
 
   // Recalculate totals if items changed
-  if (req.body.items) {
-    req.body.subtotal = req.body.items.reduce((sum, item) => sum + item.amount, 0);
-    req.body.total = req.body.subtotal + (req.body.tax || invoice.tax) - (req.body.discount || invoice.discount);
+  // (also when tax/discount alone change, and keep an explicit 0)
+  if (req.body.items || req.body.tax !== undefined || req.body.discount !== undefined) {
+    const items = req.body.items || invoice.items;
+    const tax = req.body.tax !== undefined ? Number(req.body.tax) || 0 : invoice.tax || 0;
+    const discount = req.body.discount !== undefined ? Number(req.body.discount) || 0 : invoice.discount || 0;
+    const { subtotal, total } = calculateTotals(res, items, tax, discount);
+    req.body.tax = tax;
+    req.body.discount = discount;
+    req.body.subtotal = subtotal;
+    req.body.total = total;
   }
+  delete req.body.invoiceNumber;
+  // status is derived from payments; only manual cancellation is allowed
+  if (req.body.status !== 'cancelled') delete req.body.status;
+
+  const beforeDoc = snapshot(invoice);
 
   const updated = await Invoice.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
@@ -162,6 +199,8 @@ export const updateInvoice = asyncHandler(async (req, res) => {
   })
     .populate('student', 'firstName lastName class section admissionNumber')
     .populate('parent', 'firstName lastName email phone');
+
+  await logAudit(req, { action: 'update', entity: 'Invoice', entityId: invoice._id, ...diffSnapshots(beforeDoc, await Invoice.findById(invoice._id)) });
 
   res.status(200).json({
     success: true,
@@ -188,7 +227,8 @@ export const deleteInvoice = asyncHandler(async (req, res) => {
     throw new Error('Cannot delete invoice with existing payments');
   }
 
-  await Invoice.findByIdAndDelete(req.params.id);
+  await invoice.softDelete(req.user._id);
+  await logAudit(req, { action: 'delete', entity: 'Invoice', entityId: invoice._id, before: snapshot(invoice) });
 
   res.status(200).json({
     success: true,

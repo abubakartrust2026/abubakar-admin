@@ -1,4 +1,5 @@
 import asyncHandler from 'express-async-handler';
+import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
 import OpeningBalance from '../models/OpeningBalance.js';
 import Institution from '../models/Institution.js';
 
@@ -32,11 +33,21 @@ export const upsertOpeningBalance = asyncHandler(async (req, res) => {
     throw new Error('institution and financialYear are required');
   }
 
+  const previous = await OpeningBalance.findOne({ institution, financialYear });
+
   const updated = await OpeningBalance.findOneAndUpdate(
     { institution, financialYear },
     { amount, notes, setBy: req.user._id },
     { new: true, upsert: true, runValidators: true }
   );
+
+  await logAudit(req, {
+    action: previous ? 'update' : 'create',
+    entity: 'OpeningBalance',
+    entityId: updated._id,
+    ...(previous ? diffSnapshots(previous, updated) : { after: snapshot(updated) }),
+    meta: { institution, financialYear },
+  });
 
   res.status(200).json({
     success: true,
