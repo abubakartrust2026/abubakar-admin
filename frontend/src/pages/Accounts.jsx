@@ -50,11 +50,13 @@ const Accounts = () => {
   const [showTxForm, setShowTxForm] = useState(false);
   const [editingTx, setEditingTx] = useState(null);
   const [txFormData, setTxFormData] = useState(defaultTxForm);
+  const [txSubmitting, setTxSubmitting] = useState(false);
 
   // Institutions tab
   const [showInstForm, setShowInstForm] = useState(false);
   const [editingInst, setEditingInst] = useState(null);
   const [instFormData, setInstFormData] = useState(defaultInstForm);
+  const [instSubmitting, setInstSubmitting] = useState(false);
   const [openingBalances, setOpeningBalances] = useState({});
 
   // Reports
@@ -163,6 +165,8 @@ const Accounts = () => {
 
   const handleTxSubmit = async (e) => {
     e.preventDefault();
+    if (txSubmitting) return;
+    setTxSubmitting(true);
     try {
       const data = { ...txFormData, amount: parseFloat(txFormData.amount), financialYear };
       if (editingTx) {
@@ -176,6 +180,8 @@ const Accounts = () => {
       loadTransactions();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Operation failed');
+    } finally {
+      setTxSubmitting(false);
     }
   };
 
@@ -224,6 +230,8 @@ const Accounts = () => {
 
   const handleInstSubmit = async (e) => {
     e.preventDefault();
+    if (instSubmitting) return;
+    setInstSubmitting(true);
     try {
       if (editingInst) {
         await institutionApi.update(editingInst._id, instFormData);
@@ -236,6 +244,8 @@ const Accounts = () => {
       loadInstitutions();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Operation failed');
+    } finally {
+      setInstSubmitting(false);
     }
   };
 
@@ -423,6 +433,7 @@ const Accounts = () => {
         <TransactionForm
           formData={txFormData} setFormData={setTxFormData} institutions={institutions}
           onSubmit={handleTxSubmit} onCancel={() => setShowTxForm(false)} editing={!!editingTx}
+          submitting={txSubmitting}
         />
       </Modal>
 
@@ -451,7 +462,7 @@ const Accounts = () => {
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button type="button" onClick={() => setShowInstForm(false)} className="btn-secondary">Cancel</button>
-            <button type="submit" className="btn-primary">{editingInst ? 'Update' : 'Add'} Institution</button>
+            <button type="submit" disabled={instSubmitting} className="btn-primary disabled:opacity-50">{instSubmitting ? 'Saving...' : `${editingInst ? 'Update' : 'Add'} Institution`}</button>
           </div>
         </form>
       </Modal>

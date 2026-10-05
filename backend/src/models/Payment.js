@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import softDeletePlugin from '../utils/softDelete.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../config/constants.js';
-import { nextPaymentSeq } from '../utils/paymentCounter.js';
+import { Counter } from './Counter.js';
 
 const paymentSchema = new mongoose.Schema(
   {
@@ -81,20 +81,28 @@ const paymentSchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate payment and receipt numbers before validation (atomic counter, no duplicates)
+// Auto-generate payment and receipt numbers before validation (atomic to prevent duplicates)
 paymentSchema.pre('validate', async function (next) {
-  try {
-    if (!this.paymentNumber || !this.receiptNumber) {
-      const seq = await nextPaymentSeq();
+  if (!this.paymentNumber || !this.receiptNumber) {
+    try {
+      const counter = await Counter.findOneAndUpdate(
+        { _id: 'paymentNumber' },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+      );
+      if (!counter) {
+        return next(new Error('Failed to generate payment number'));
+      }
       const year = new Date().getFullYear();
-      const padded = String(seq).padStart(5, '0');
-      if (!this.paymentNumber) this.paymentNumber = `PAY-${year}-${padded}`;
-      if (!this.receiptNumber) this.receiptNumber = `REC-${year}-${padded}`;
+      const seq = String(counter.seq).padStart(5, '0');
+      if (!this.paymentNumber) this.paymentNumber = `PAY-${year}-${seq}`;
+      if (!this.receiptNumber) this.receiptNumber = `REC-${year}-${seq}`;
+    } catch (err) {
+      return next(err);
     }
-    next();
-  } catch (err) {
-    next(err);
   }
+
+  next();
 });
 
 // Indexes

@@ -1,12 +1,13 @@
 import asyncHandler from 'express-async-handler';
 import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
-import { escapeRegex, parsePagination } from '../utils/queryHelpers.js';
+import { parsePagination } from '../utils/queryHelpers.js';
 import mongoose from 'mongoose';
 import XLSX from 'xlsx';
 import LedgerTransaction from '../models/LedgerTransaction.js';
 import Institution from '../models/Institution.js';
 import OpeningBalance from '../models/OpeningBalance.js';
 import { LEDGER_TRANSACTION_TYPE } from '../config/constants.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 // Indian financial year (Apr-Mar) for a date, e.g. 2026-05-10 -> "2026-27"
 const getFinancialYearForDate = (date) => {
@@ -77,10 +78,11 @@ export const getTransactions = asyncHandler(async (req, res) => {
   }
 
   if (search) {
+    const searchRegex = escapeRegex(search);
     query.$or = [
-      { description: { $regex: escapeRegex(search), $options: 'i' } },
-      { referenceNo: { $regex: escapeRegex(search), $options: 'i' } },
-      { remarks: { $regex: escapeRegex(search), $options: 'i' } },
+      { description: { $regex: searchRegex, $options: 'i' } },
+      { referenceNo: { $regex: searchRegex, $options: 'i' } },
+      { remarks: { $regex: searchRegex, $options: 'i' } },
     ];
   }
 

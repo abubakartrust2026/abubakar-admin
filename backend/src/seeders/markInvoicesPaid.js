@@ -4,9 +4,11 @@ import connectDB from '../config/db.js';
 
 dotenv.config();
 
+// Marks INV-2026-00001 through INV-2026-00053 as paid.
+// These invoices had their remaining balances settled outside the system.
 const START = 1;
 const END = 53;
-const YEAR = '2026';
+const YEAR = 2026;
 
 const invoiceNumbers = Array.from(
   { length: END - START + 1 },
@@ -22,8 +24,12 @@ const markInvoicesPaid = async () => {
       { $set: { status: 'paid' } }
     );
 
-    console.log(`Matched ${result.matchedCount} invoices, updated ${result.modifiedCount} to status "paid".`);
-    console.log('Note: this only updates the status field. It does not create Payment records, so amountPaid/amountDue shown in the invoice view will still reflect the original balance unless payments are backfilled separately.');
+    console.log(`Matched ${result.matchedCount} invoice(s), updated ${result.modifiedCount} to status "paid".`);
+    console.log(
+      'Note: this only updates the invoice status field. It does not create Payment records, ' +
+      'so amountPaid/amountDue figures derived from the Payment collection may still reflect the ' +
+      'original unpaid breakdown unless payment records are backfilled separately.'
+    );
 
     process.exit(0);
   } catch (error) {

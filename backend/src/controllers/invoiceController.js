@@ -1,10 +1,11 @@
 import asyncHandler from 'express-async-handler';
 import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
-import { escapeRegex, parsePagination } from '../utils/queryHelpers.js';
+import { parsePagination } from '../utils/queryHelpers.js';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import Student from '../models/Student.js';
 import { syncInvoiceCounter } from '../utils/invoiceCounter.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 // Validates line items and computes subtotal/total. Sets 400 and throws on bad input.
 const calculateTotals = (res, items, tax, discount) => {
@@ -38,15 +39,16 @@ export const getInvoices = asyncHandler(async (req, res) => {
   if (parentId) query.parent = parentId;
 
   if (search) {
+    const searchRegex = escapeRegex(search);
     const matchingStudents = await Student.find({
       $or: [
-        { firstName: { $regex: escapeRegex(search), $options: 'i' } },
-        { lastName: { $regex: escapeRegex(search), $options: 'i' } },
+        { firstName: { $regex: searchRegex, $options: 'i' } },
+        { lastName: { $regex: searchRegex, $options: 'i' } },
       ],
     }).select('_id');
 
     query.$or = [
-      { invoiceNumber: { $regex: escapeRegex(search), $options: 'i' } },
+      { invoiceNumber: { $regex: searchRegex, $options: 'i' } },
       { student: { $in: matchingStudents.map((s) => s._id) } },
     ];
   }

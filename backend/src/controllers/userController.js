@@ -1,8 +1,9 @@
 import asyncHandler from 'express-async-handler';
 import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
-import { escapeRegex, parsePagination } from '../utils/queryHelpers.js';
+import { parsePagination } from '../utils/queryHelpers.js';
 import User from '../models/User.js';
 import Student from '../models/Student.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -14,10 +15,11 @@ export const getUsers = asyncHandler(async (req, res) => {
 
   if (role) query.role = role;
   if (search) {
+    const searchRegex = escapeRegex(search);
     query.$or = [
-      { firstName: { $regex: escapeRegex(search), $options: 'i' } },
-      { lastName: { $regex: escapeRegex(search), $options: 'i' } },
-      { email: { $regex: escapeRegex(search), $options: 'i' } },
+      { firstName: { $regex: searchRegex, $options: 'i' } },
+      { lastName: { $regex: searchRegex, $options: 'i' } },
+      { email: { $regex: searchRegex, $options: 'i' } },
     ];
   }
 
