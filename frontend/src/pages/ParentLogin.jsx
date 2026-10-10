@@ -6,7 +6,7 @@ import { toast } from 'react-toastify';
 import AuthLayout from '../components/layout/AuthLayout';
 import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
 import { authApi } from '../api/authApi';
-import { setLoginPortal } from '../utils/portal';
+import { setLoginPortal, portalFromHost } from '../utils/portal';
 
 const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
 const isStandalone = () =>
@@ -166,9 +166,12 @@ const ParentLogin = () => {
         </div>
       )}
 
-      <p className="text-center text-sm text-gray-500 mt-6">
-        School staff? <Link to="/login" className="text-primary-700 font-medium hover:underline">Admin Login</Link>
-      </p>
+      {/* On the dedicated parents domain there is no link to the admin login */}
+      {portalFromHost() !== 'parent' && (
+        <p className="text-center text-sm text-gray-500 mt-6">
+          School staff? <Link to="/login" className="text-primary-700 font-medium hover:underline">Admin Login</Link>
+        </p>
+      )}
     </AuthLayout>
   );
 };
