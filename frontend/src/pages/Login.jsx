@@ -6,7 +6,7 @@ import { toast } from 'react-toastify';
 import AuthLayout from '../components/layout/AuthLayout';
 import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
 import { authApi } from '../api/authApi';
-import { setLoginPortal } from '../utils/portal';
+import { setLoginPortal, portalFromHost } from '../utils/portal';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -105,9 +105,12 @@ const Login = () => {
         </button>
       </form>
 
-      <p className="text-center text-sm text-gray-500 mt-6">
-        Are you a parent? <Link to="/parent/login" className="text-primary-700 font-medium hover:underline">Parent Login</Link>
-      </p>
+      {/* On the dedicated admin domain there is no link to the parent portal */}
+      {portalFromHost() !== 'admin' && (
+        <p className="text-center text-sm text-gray-500 mt-6">
+          Are you a parent? <Link to="/parent/login" className="text-primary-700 font-medium hover:underline">Parent Login</Link>
+        </p>
+      )}
     </AuthLayout>
   );
 };

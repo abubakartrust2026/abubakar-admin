@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="manifest" id="app-manifest" href="/manifest.webmanifest" />
+    <script>
+      // On the parents domain, install as the parent app (opens on the parent login)
+      if (location.hostname.indexOf('parents.') === 0) {
+        document.getElementById('app-manifest').href = '/parent-manifest.webmanifest';
+      }
+    </script>
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <meta name="theme-color" content="#92400e" />
     <meta name="mobile-web-app-capable" content="yes" />

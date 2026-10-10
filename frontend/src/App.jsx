@@ -16,6 +16,7 @@ import NotFound from './pages/NotFound';
 import ParentLogin from './pages/ParentLogin';
 import ChangePassword from './pages/ChangePassword';
 import ParentApp from './pages/ParentApp';
+import { portalFromHost } from './utils/portal';
 
 // Layouts & Auth
 import MainLayout from './components/layout/MainLayout';
@@ -26,8 +27,9 @@ function App() {
   return (
     <Routes>
       {/* Public Routes */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/parent/login" element={<ParentLogin />} />
+      {/* Each dedicated domain only serves its own login page */}
+      <Route path="/login" element={portalFromHost() === 'parent' ? <Navigate to="/parent/login" replace /> : <Login />} />
+      <Route path="/parent/login" element={portalFromHost() === 'admin' ? <Navigate to="/login" replace /> : <ParentLogin />} />
       <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
 
       {/* Protected Routes */}
