@@ -5,9 +5,11 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="manifest" id="app-manifest" href="/manifest.webmanifest" />
     <script>
-      // On the parents domain, install as the parent app (opens on the parent login)
+      // On the parents/teachers domains, install as that app (opens on its own login)
       if (location.hostname.indexOf('parents.') === 0) {
         document.getElementById('app-manifest').href = '/parent-manifest.webmanifest';
+      } else if (location.hostname.indexOf('teachers.') === 0) {
+        document.getElementById('app-manifest').href = '/teacher-manifest.webmanifest';
       }
     </script>
     <link rel="apple-touch-icon" href="/icon-192.png" />

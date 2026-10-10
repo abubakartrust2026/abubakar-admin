@@ -7,13 +7,13 @@ const router = express.Router();
 router.use(protect);
 
 router.route('/')
-  .get(getInvoices)
+  .get(authorize('admin', 'parent'), getInvoices)
   .post(authorize('admin'), createInvoice);
 
 router.post('/sync-counter', authorize('admin'), syncCounter);
 
 router.route('/:id')
-  .get(getInvoiceById)
+  .get(authorize('admin', 'parent'), getInvoiceById)
   .put(authorize('admin'), updateInvoice)
   .delete(authorize('admin'), deleteInvoice);
 

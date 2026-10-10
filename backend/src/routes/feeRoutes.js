@@ -7,11 +7,11 @@ const router = express.Router();
 router.use(protect);
 
 router.route('/')
-  .get(getFees)
+  .get(authorize('admin', 'parent'), getFees)
   .post(authorize('admin'), createFee);
 
 router.route('/:id')
-  .get(getFeeById)
+  .get(authorize('admin', 'parent'), getFeeById)
   .put(authorize('admin'), updateFee)
   .delete(authorize('admin'), deleteFee);
 

@@ -2,6 +2,10 @@ import { NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
   HiOutlineHome,
+  HiOutlineAcademicCap,
+  HiOutlineCalendar,
+  HiOutlineBookOpen,
+  HiOutlineDocumentReport,
   HiOutlineUserGroup,
   HiOutlineClipboardCheck,
   HiOutlineCurrencyRupee,
@@ -28,6 +32,8 @@ const Sidebar = () => {
     { to: '/reports', icon: HiOutlineChartBar, label: 'Reports' },
     { to: '/inventory', icon: HiOutlineArchive, label: 'Inventory' },
     { to: '/accounts', icon: HiOutlineCalculator, label: 'Accounts' },
+    { to: '/teachers', icon: HiOutlineAcademicCap, label: 'Teachers' },
+    { to: '/timetable', icon: HiOutlineCalendar, label: 'Timetable' },
     { to: '/parent-app', icon: HiOutlineQrcode, label: 'Parent App' },
   ];
 
@@ -38,7 +44,17 @@ const Sidebar = () => {
     { to: '/change-password', icon: HiOutlineLockClosed, label: 'Change Password' },
   ];
 
-  const links = user?.role === 'admin' ? adminLinks : parentLinks;
+  const teacherLinks = [
+    { to: '/dashboard', icon: HiOutlineHome, label: 'Dashboard' },
+    { to: '/attendance', icon: HiOutlineClipboardCheck, label: 'Attendance' },
+    { to: '/students', icon: HiOutlineUserGroup, label: 'My Students' },
+    { to: '/homework', icon: HiOutlineBookOpen, label: 'Homework' },
+    { to: '/marks', icon: HiOutlineDocumentReport, label: 'Marks' },
+    { to: '/timetable', icon: HiOutlineCalendar, label: 'Timetable' },
+    { to: '/change-password', icon: HiOutlineLockClosed, label: 'Change Password' },
+  ];
+
+  const links = { admin: adminLinks, teacher: teacherLinks }[user?.role] || parentLinks;
 
   return (
     <aside

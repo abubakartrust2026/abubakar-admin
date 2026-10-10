@@ -1,6 +1,7 @@
 import { useSelector } from 'react-redux';
 import AdminDashboard from '../components/dashboard/AdminDashboard';
 import ParentDashboard from '../components/dashboard/ParentDashboard';
+import TeacherDashboard from '../components/dashboard/TeacherDashboard';
 import { selectUser } from '../store/slices/authSlice';
 
 const Dashboard = () => {
@@ -8,6 +9,7 @@ const Dashboard = () => {
 
   if (user?.role === 'admin') return <AdminDashboard />;
   if (user?.role === 'parent') return <ParentDashboard />;
+  if (user?.role === 'teacher') return <TeacherDashboard />;
 
   return (
     <div className="text-center py-12">

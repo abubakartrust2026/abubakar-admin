@@ -188,3 +188,45 @@ export const getParentDashboard = asyncHandler(async (req, res) => {
     },
   });
 });
+// @desc    Get teacher dashboard (assigned classes + today's attendance progress)
+// @route   GET /api/dashboard/teacher
+// @access  Private/Teacher
+export const getTeacherDashboard = asyncHandler(async (req, res) => {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  const classes = [];
+  for (const assigned of req.user.assignedClasses || []) {
+    const filter = { class: assigned.class, status: 'active', ...(assigned.section && { section: assigned.section }) };
+    const students = await Student.find(filter).select('_id');
+    const ids = students.map((s) => s._id);
+    const records = await Attendance.find({ student: { $in: ids }, date: today }).select('status');
+
+    const count = (status) => records.filter((r) => r.status === status).length;
+    classes.push({
+      class: assigned.class,
+      section: assigned.section || '',
+      totalStudents: ids.length,
+      marked: records.length,
+      pending: Math.max(ids.length - records.length, 0),
+      present: count('present'),
+      absent: count('absent'),
+      late: count('late'),
+      excused: count('excused'),
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      date: today,
+      classes,
+      totals: {
+        classes: classes.length,
+        students: classes.reduce((n, c) => n + c.totalStudents, 0),
+        marked: classes.reduce((n, c) => n + c.marked, 0),
+        pending: classes.reduce((n, c) => n + c.pending, 0),
+      },
+    },
+  });
+});

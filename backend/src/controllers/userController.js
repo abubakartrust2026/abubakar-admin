@@ -5,10 +5,19 @@ import { parsePagination, pick } from '../utils/queryHelpers.js';
 import User from '../models/User.js';
 import Student from '../models/Student.js';
 import { escapeRegex } from '../utils/escapeRegex.js';
+import { normalizePhone } from '../utils/phone.js';
 
 // `children` is maintained via Student.parent links, never set directly
 const USER_CREATE_FIELDS = ['firstName', 'lastName', 'email', 'password', 'role', 'phone', 'address', 'isActive'];
 const USER_UPDATE_FIELDS = ['firstName', 'lastName', 'email', 'role', 'phone', 'address', 'isActive'];
+
+// Keeps only well-formed { class, section } pairs, de-duplicated
+const cleanAssignedClasses = (list) => {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : [])
+    .map((c) => ({ class: String(c?.class || '').trim(), section: String(c?.section || '').trim() }))
+    .filter((c) => c.class && !seen.has(`${c.class}|${c.section}`) && seen.add(`${c.class}|${c.section}`));
+};
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -64,15 +73,50 @@ export const getUserById = asyncHandler(async (req, res) => {
 // @route   POST /api/users
 // @access  Private/Admin
 export const createUser = asyncHandler(async (req, res) => {
-  const { email } = req.body;
+  const data = pick(req.body, USER_CREATE_FIELDS);
+  let tempPassword;
 
-  const existingUser = await User.findOne({ email });
+  if (data.role === 'teacher') {
+    // Teachers sign in with their phone number; email is internal and auto-filled when omitted
+    data.phone = normalizePhone(data.phone);
+    if (data.phone.length !== 10) {
+      res.status(400);
+      throw new Error('A valid 10-digit phone number is required for teachers');
+    }
+    if (await User.exists({ phone: data.phone, role: 'teacher' })) {
+      res.status(400);
+      throw new Error('A teacher with this phone number already exists');
+    }
+    data.email = data.email || `t${data.phone}@teachers.abubakartrust.in`;
+    if (!data.password) {
+      tempPassword = generateTempPassword();
+      data.password = tempPassword;
+    }
+    data.mustChangePassword = true;
+    data.assignedClasses = cleanAssignedClasses(req.body.assignedClasses);
+  }
+
+  const existingUser = await User.findOne({ email: data.email });
   if (existingUser) {
     res.status(400);
     throw new Error('User with this email already exists');
   }
 
-  const user = await User.create(pick(req.body, USER_CREATE_FIELDS));
+  let user;
+  try {
+    user = await User.create(data);
+  } catch (err) {
+    // A deleted user still holds its email (unique index), but the check above can't see it
+    if (Number(err.code) === 11000 && err.keyValue?.email) {
+      res.status(400);
+      throw new Error('This email is already used by another (possibly deleted) user. Use a different email.');
+    }
+    if (Number(err.code) === 11000 && err.keyValue?.phone) {
+      res.status(400);
+      throw new Error('This phone number is already used by another (possibly deleted) teacher.');
+    }
+    throw err;
+  }
 
   await logAudit(req, { action: 'create', entity: 'User', entityId: user._id, after: snapshot(user) });
 
@@ -80,6 +124,7 @@ export const createUser = asyncHandler(async (req, res) => {
     success: true,
     message: 'User created successfully',
     data: user.toPublicJSON(),
+    ...(tempPassword && { tempPassword }),
   });
 });
 
@@ -106,7 +151,30 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   const beforeDoc = snapshot(user);
 
-  const updatedUser = await User.findByIdAndUpdate(req.params.id, pick(req.body, USER_UPDATE_FIELDS), {
+  const updates = pick(req.body, USER_UPDATE_FIELDS);
+  if (user.role === 'teacher') {
+    if (updates.role && updates.role !== 'teacher') {
+      res.status(400);
+      throw new Error('A teacher account cannot be converted to another role');
+    }
+    if (updates.phone !== undefined) {
+      updates.phone = normalizePhone(updates.phone);
+      if (updates.phone.length !== 10) {
+        res.status(400);
+        throw new Error('A valid 10-digit phone number is required for teachers');
+      }
+      if (await User.exists({ phone: updates.phone, role: 'teacher', _id: { $ne: user._id } })) {
+        res.status(400);
+        throw new Error('A teacher with this phone number already exists');
+      }
+    }
+    if (req.body.assignedClasses !== undefined) updates.assignedClasses = cleanAssignedClasses(req.body.assignedClasses);
+  } else if (updates.role === 'teacher') {
+    res.status(400);
+    throw new Error('Create a new teacher account instead of converting an existing user');
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(req.params.id, updates, {
     new: true,
     runValidators: true,
   });
@@ -205,6 +273,30 @@ export const resetParentPassword = asyncHandler(async (req, res) => {
       tempPassword,
       students: students.map((s) => ({ admissionNumber: s.admissionNumber, name: `${s.firstName} ${s.lastName}`, class: s.class })),
     },
+  });
+});
+
+// @desc    Issue a temporary password for one teacher
+// @route   POST /api/users/:id/reset-teacher-password
+// @access  Private/Admin
+export const resetTeacherPassword = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user || user.role !== 'teacher') {
+    res.status(404);
+    throw new Error('Teacher not found');
+  }
+
+  const tempPassword = generateTempPassword();
+  user.password = tempPassword;
+  user.mustChangePassword = true;
+  await user.save();
+
+  await logAudit(req, { action: 'update', entity: 'User', entityId: user._id, before: { passwordReset: false }, after: { passwordReset: true } });
+
+  res.status(200).json({
+    success: true,
+    message: 'Temporary password generated. Share it with the teacher; it is shown only once.',
+    data: { teacherName: user.getFullName(), phone: user.phone, tempPassword },
   });
 });
 
