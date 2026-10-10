@@ -7,6 +7,7 @@ export const userApi = {
   update: (id, data) => axiosInstance.put(`/users/${id}`, data),
   delete: (id) => axiosInstance.delete(`/users/${id}`),
   resetParentPassword: (id) => axiosInstance.post(`/users/${id}/reset-parent-password`),
+  resetTeacherPassword: (id) => axiosInstance.post(`/users/${id}/reset-teacher-password`),
   bulkParentCredentials: (data) => axiosInstance.post('/users/parent-credentials/bulk', data),
   getParents: () => axiosInstance.get('/users/parents'),
 };

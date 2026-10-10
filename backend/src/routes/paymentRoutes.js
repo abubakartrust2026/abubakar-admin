@@ -7,13 +7,13 @@ const router = express.Router();
 router.use(protect);
 
 router.route('/')
-  .get(getPayments)
+  .get(authorize('admin', 'parent'), getPayments)
   .post(authorize('admin'), createPayment);
 
 router.post('/bulk', authorize('admin'), bulkCreatePayments);
 
 router.route('/:id')
-  .get(getPaymentById)
+  .get(authorize('admin', 'parent'), getPaymentById)
   .put(authorize('admin'), updatePayment)
   .delete(authorize('admin'), deletePayment);
 

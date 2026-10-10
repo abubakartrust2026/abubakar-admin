@@ -61,6 +61,7 @@ const Students = () => {
   };
 
   const handleOpenForm = (student = null) => {
+    setShowAddParent(false);
     if (student) {
       setEditingStudent(student);
       // Only editable fields (no _id/__v/timestamps/populated objects); address and
@@ -100,6 +101,12 @@ const Students = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitting) return;
+    if (!formData.parent) {
+      toast.error(showAddParent
+        ? 'Click "Create Parent" first to save the new parent, then create the student'
+        : 'Please select a parent');
+      return;
+    }
     setSubmitting(true);
     try {
       if (editingStudent) {

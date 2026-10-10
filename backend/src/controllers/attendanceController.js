@@ -4,6 +4,12 @@ import { parsePagination } from '../utils/queryHelpers.js';
 import Attendance from '../models/Attendance.js';
 import Student from '../models/Student.js';
 import { notifyParentsOfAttendance } from '../utils/whatsappService.js';
+import { studentScopeFilter, teacherCanAccessStudent } from '../middleware/teacherScope.js';
+
+const denyTeacher = (res) => {
+  res.status(403);
+  throw new Error("You are not assigned to this student's class");
+};
 
 // @desc    Get attendance records
 // @route   GET /api/attendance
@@ -30,10 +36,24 @@ export const getAttendance = asyncHandler(async (req, res) => {
     };
   }
 
-  // If filtering by class, get student IDs first
-  if (studentClass) {
-    const students = await Student.find({ class: studentClass, status: 'active' }).select('_id');
-    query.student = { $in: students.map(s => s._id) };
+  // If filtering by class (always the case for teachers, who are limited to their classes), get student IDs first
+  if (req.user.role === 'teacher' && !studentClass && !studentId) {
+    res.status(400);
+    throw new Error('Please choose a class');
+  }
+  if (studentClass || req.user.role === 'teacher') {
+    const students = await Student.find({
+      ...(studentClass && { class: studentClass }),
+      status: 'active',
+      ...studentScopeFilter(req.user),
+    }).select('_id');
+    const ids = students.map(s => s._id);
+    if (studentId) {
+      // A single-student lookup must stay inside the class scope
+      if (!ids.some(id => id.toString() === String(studentId))) return denyTeacher(res);
+    } else {
+      query.student = { $in: ids };
+    }
   }
 
   const total = await Attendance.countDocuments(query);
@@ -60,6 +80,8 @@ export const getAttendance = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 export const markAttendance = asyncHandler(async (req, res) => {
   const { student, date, status, remarks } = req.body;
+
+  if (req.user.role === 'teacher' && !(await teacherCanAccessStudent(req.user, student))) return denyTeacher(res);
 
   // Normalize date to start of day
   const attendanceDate = new Date(date);
@@ -138,6 +160,11 @@ export const bulkMarkAttendance = asyncHandler(async (req, res) => {
     throw new Error('Please provide attendance records');
   }
 
+  if (req.user.role === 'teacher') {
+    const allowed = await Student.find({ _id: { $in: records.map(r => r.student) }, ...studentScopeFilter(req.user) }).select('_id');
+    if (allowed.length !== new Set(records.map(r => String(r.student))).size) return denyTeacher(res);
+  }
+
   const attendanceDate = new Date(date);
   attendanceDate.setUTCHours(0, 0, 0, 0);
 
@@ -206,6 +233,7 @@ export const getAttendanceByStudent = asyncHandler(async (req, res) => {
       throw new Error('Not authorized to view this student\'s attendance');
     }
   }
+  if (req.user.role === 'teacher' && !(await teacherCanAccessStudent(req.user, req.params.studentId))) return denyTeacher(res);
 
   if (startDate && endDate) {
     query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
@@ -232,6 +260,7 @@ export const getAttendanceSummary = asyncHandler(async (req, res) => {
       throw new Error('Not authorized');
     }
   }
+  if (req.user.role === 'teacher' && !(await teacherCanAccessStudent(req.user, req.params.studentId))) return denyTeacher(res);
 
   if (startDate && endDate) {
     query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };

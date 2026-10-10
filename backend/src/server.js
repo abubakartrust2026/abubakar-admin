@@ -25,6 +25,9 @@ import institutionRoutes from './routes/institutionRoutes.js';
 import openingBalanceRoutes from './routes/openingBalanceRoutes.js';
 import ledgerRoutes from './routes/ledgerRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
+import homeworkRoutes from './routes/homeworkRoutes.js';
+import marksRoutes from './routes/marksRoutes.js';
+import timetableRoutes from './routes/timetableRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -52,7 +55,7 @@ const loginLimiter = rateLimit({
   max: 20,
   message: { success: false, message: 'Too many login attempts, please try again later.' },
 });
-app.use(['/api/auth/login', '/api/auth/parent-login'], loginLimiter);
+app.use(['/api/auth/login', '/api/auth/parent-login', '/api/auth/teacher-login'], loginLimiter);
 app.use('/api/', limiter);
 
 // CORS configuration
@@ -118,6 +121,9 @@ app.use('/api/institutions', institutionRoutes);
 app.use('/api/opening-balances', openingBalanceRoutes);
 app.use('/api/ledger', ledgerRoutes);
 app.use('/api/audit-logs', auditRoutes);
+app.use('/api/homework', homeworkRoutes);
+app.use('/api/marks', marksRoutes);
+app.use('/api/timetable', timetableRoutes);
 
 // Error handling
 app.use(notFound);

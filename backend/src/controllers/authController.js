@@ -6,6 +6,7 @@ import {
   generateRefreshToken,
   verifyRefreshToken,
 } from '../utils/generateToken.js';
+import { normalizePhone } from '../utils/phone.js';
 
 /**
  * @desc    Login user
@@ -49,6 +50,11 @@ export const login = asyncHandler(async (req, res) => {
     throw new Error('Parents should sign in from the Parent Login page');
   }
 
+  if (user.role === 'teacher') {
+    res.status(403);
+    throw new Error('Teachers should sign in from the Teacher Login page');
+  }
+
   // Generate tokens
   const token = generateAccessToken(user._id);
   const refreshToken = generateRefreshToken(user._id);
@@ -89,6 +95,39 @@ export const parentLogin = asyncHandler(async (req, res) => {
   const user = await User.findById(student.parent).select('+password');
   if (!user || user.role !== 'parent' || !user.isActive) throw invalid();
 
+  if (!(await user.comparePassword(String(password)))) throw invalid();
+
+  res.status(200).json({
+    success: true,
+    message: 'Login successful',
+    user: user.toPublicJSON(),
+    token: generateAccessToken(user._id),
+    refreshToken: generateRefreshToken(user._id),
+  });
+});
+
+/**
+ * @desc    Teacher login with phone number
+ * @route   POST /api/auth/teacher-login
+ * @access  Public
+ */
+export const teacherLogin = asyncHandler(async (req, res) => {
+  const phone = normalizePhone(req.body.phone);
+  const password = req.body.password;
+
+  if (!phone || !password) {
+    res.status(400);
+    throw new Error('Please provide phone number and password');
+  }
+
+  // Same message for every failure so phone numbers can't be probed
+  const invalid = () => {
+    res.status(401);
+    return new Error('Invalid phone number or password');
+  };
+
+  const user = await User.findOne({ phone, role: 'teacher' }).select('+password');
+  if (!user || !user.isActive) throw invalid();
   if (!(await user.comparePassword(String(password)))) throw invalid();
 
   res.status(200).json({

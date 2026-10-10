@@ -1,9 +1,11 @@
+import mongoose from 'mongoose';
 import asyncHandler from 'express-async-handler';
 import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
 import { parsePagination, pick } from '../utils/queryHelpers.js';
 import Student from '../models/Student.js';
 import User from '../models/User.js';
 import { escapeRegex } from '../utils/escapeRegex.js';
+import { studentScopeFilter, teacherCanAccessClass } from '../middleware/teacherScope.js';
 
 const STUDENT_FIELDS = [
   'firstName', 'lastName', 'dateOfBirth', 'gender', 'admissionNumber', 'admissionDate',
@@ -69,6 +71,12 @@ export const getStudentById = asyncHandler(async (req, res) => {
     throw new Error('Not authorized to view this student');
   }
 
+  // Teachers can only view students in their assigned classes
+  if (req.user.role === 'teacher' && !teacherCanAccessClass(req.user, student.class, student.section)) {
+    res.status(403);
+    throw new Error('Not authorized to view this student');
+  }
+
   res.status(200).json({ success: true, data: student });
 });
 
@@ -84,12 +92,18 @@ export const createStudent = asyncHandler(async (req, res) => {
   }
 
   // Verify parent exists
-  if (req.body.parent) {
-    const parent = await User.findById(req.body.parent);
-    if (!parent || parent.role !== 'parent') {
-      res.status(400);
-      throw new Error('Invalid parent reference');
-    }
+  if (!req.body.parent) {
+    res.status(400);
+    throw new Error('Please select a parent (or create one first)');
+  }
+  if (!mongoose.isValidObjectId(req.body.parent)) {
+    res.status(400);
+    throw new Error('Invalid parent reference');
+  }
+  const parent = await User.findById(req.body.parent);
+  if (!parent || parent.role !== 'parent') {
+    res.status(400);
+    throw new Error('Invalid parent reference');
   }
 
   const student = await Student.create(pick(req.body, STUDENT_FIELDS));
@@ -211,6 +225,7 @@ export const getStudentsByClass = asyncHandler(async (req, res) => {
   const students = await Student.find({
     class: req.params.class,
     status: 'active',
+    ...studentScopeFilter(req.user),
   })
     .populate('parent', 'firstName lastName email phone')
     .sort({ rollNumber: 1 });

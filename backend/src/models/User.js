@@ -50,6 +50,14 @@ const userSchema = new mongoose.Schema(
         ref: 'Student',
       },
     ],
+    // Teachers only: the classes/sections they may mark attendance for, enter marks for, etc.
+    assignedClasses: [
+      {
+        _id: false,
+        class: { type: String, required: true, trim: true },
+        section: { type: String, trim: true, default: '' },
+      },
+    ],
     isActive: {
       type: Boolean,
       default: true,
@@ -106,6 +114,7 @@ userSchema.methods.toPublicJSON = function () {
     phone: this.phone,
     address: this.address,
     children: this.children,
+    assignedClasses: this.assignedClasses,
     isActive: this.isActive,
     mustChangePassword: this.mustChangePassword,
     createdAt: this.createdAt,
@@ -115,6 +124,8 @@ userSchema.methods.toPublicJSON = function () {
 
 // Index for faster queries
 userSchema.index({ role: 1 });
+// Teachers sign in with their phone number, so it must be unique among teachers (parents may share numbers)
+userSchema.index({ phone: 1 }, { unique: true, partialFilterExpression: { role: 'teacher' } });
 
 userSchema.plugin(softDeletePlugin);
 

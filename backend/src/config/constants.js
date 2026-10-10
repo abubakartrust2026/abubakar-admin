@@ -1,6 +1,7 @@
 export const USER_ROLES = {
   ADMIN: 'admin',
   PARENT: 'parent',
+  TEACHER: 'teacher',
 };
 
 export const STUDENT_STATUS = {
