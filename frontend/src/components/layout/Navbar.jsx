@@ -4,6 +4,7 @@ import { HiOutlineMenuAlt2, HiOutlineLogout, HiOutlineUser } from 'react-icons/h
 import { toggleSidebar } from '../../store/slices/uiSlice';
 import { logout } from '../../store/slices/authSlice';
 import { getInitials } from '../../utils/formatters';
+import { getLoginPath } from '../../utils/portal';
 
 const Navbar = () => {
   const dispatch = useDispatch();
@@ -12,7 +13,7 @@ const Navbar = () => {
 
   const handleLogout = () => {
     dispatch(logout());
-    navigate('/login');
+    navigate(getLoginPath());
   };
 
   return (

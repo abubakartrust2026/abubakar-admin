@@ -1,6 +1,9 @@
 import asyncHandler from 'express-async-handler';
 import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
-import { parsePagination } from '../utils/queryHelpers.js';
+import { parsePagination, pick } from '../utils/queryHelpers.js';
+
+const INVOICE_CREATE_FIELDS = ['student', 'parent', 'items', 'dueDate', 'academicYear', 'term'];
+const INVOICE_UPDATE_FIELDS = ['items', 'dueDate', 'academicYear', 'term'];
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import Student from '../models/Student.js';
@@ -122,12 +125,29 @@ export const createInvoice = asyncHandler(async (req, res) => {
 
   const { subtotal, total } = calculateTotals(res, items, tax, discount);
 
+  const student = await Student.findById(req.body.student);
+  if (!student) {
+    res.status(400);
+    throw new Error('Student not found');
+  }
+  if (req.body.parent && String(req.body.parent) !== String(student.parent)) {
+    res.status(400);
+    throw new Error('Parent does not match the selected student');
+  }
+
   let invoice;
   let lastError;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const data = { ...req.body, tax, discount, subtotal, total };
-      delete data.invoiceNumber; // always let the pre-validate hook generate it
+      // whitelist fields; status/isDeleted/invoiceNumber are never client-controlled
+      const data = {
+        ...pick(req.body, INVOICE_CREATE_FIELDS),
+        parent: student.parent,
+        tax,
+        discount,
+        subtotal,
+        total,
+      };
       invoice = await Invoice.create(data);
       break;
     } catch (err) {
@@ -177,6 +197,12 @@ export const updateInvoice = asyncHandler(async (req, res) => {
     throw new Error('Invoice not found');
   }
 
+  const completedPayments = await Payment.find({ invoice: invoice._id, status: 'completed' });
+  const amountPaid = completedPayments.reduce((sum, p) => sum + p.amount, 0);
+
+  // whitelist: student/parent/status/isDeleted/invoiceNumber can't be changed here
+  const update = pick(req.body, INVOICE_UPDATE_FIELDS);
+
   // Recalculate totals if items changed
   // (also when tax/discount alone change, and keep an explicit 0)
   if (req.body.items || req.body.tax !== undefined || req.body.discount !== undefined) {
@@ -184,18 +210,35 @@ export const updateInvoice = asyncHandler(async (req, res) => {
     const tax = req.body.tax !== undefined ? Number(req.body.tax) || 0 : invoice.tax || 0;
     const discount = req.body.discount !== undefined ? Number(req.body.discount) || 0 : invoice.discount || 0;
     const { subtotal, total } = calculateTotals(res, items, tax, discount);
-    req.body.tax = tax;
-    req.body.discount = discount;
-    req.body.subtotal = subtotal;
-    req.body.total = total;
+    if (total < amountPaid) {
+      res.status(400);
+      throw new Error(`Invoice total cannot be less than the amount already paid (${amountPaid})`);
+    }
+    update.tax = tax;
+    update.discount = discount;
+    update.subtotal = subtotal;
+    update.total = total;
+
+    // keep status consistent with payments when the total changes
+    if (invoice.status !== 'cancelled') {
+      if (amountPaid >= total && amountPaid > 0) update.status = 'paid';
+      else if (amountPaid > 0) update.status = 'partially_paid';
+      else update.status = 'pending';
+    }
   }
-  delete req.body.invoiceNumber;
+
   // status is derived from payments; only manual cancellation is allowed
-  if (req.body.status !== 'cancelled') delete req.body.status;
+  if (req.body.status === 'cancelled') {
+    if (amountPaid > 0) {
+      res.status(400);
+      throw new Error('Cannot cancel an invoice that has completed payments');
+    }
+    update.status = 'cancelled';
+  }
 
   const beforeDoc = snapshot(invoice);
 
-  const updated = await Invoice.findByIdAndUpdate(req.params.id, req.body, {
+  const updated = await Invoice.findByIdAndUpdate(req.params.id, update, {
     new: true,
     runValidators: true,
   })

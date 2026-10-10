@@ -2,6 +2,9 @@ import asyncHandler from 'express-async-handler';
 import { verifyAccessToken } from '../utils/generateToken.js';
 import User from '../models/User.js';
 
+// Routes usable while a temporary password is still in place
+const PASSWORD_CHANGE_EXEMPT = ['/api/auth/change-password', '/api/auth/me', '/api/auth/logout'];
+
 /**
  * Protect routes - Verify JWT token
  */
@@ -32,6 +35,14 @@ export const protect = asyncHandler(async (req, res, next) => {
     if (!req.user.isActive) {
       res.status(401);
       throw new Error('User account is not active');
+    }
+
+    // A parent holding an admin-issued temporary password must set their own first
+    if (req.user.mustChangePassword && !PASSWORD_CHANGE_EXEMPT.some((p) => req.originalUrl.startsWith(p))) {
+      res.status(403);
+      const err = new Error('You must change your temporary password before continuing');
+      err.code = 'PASSWORD_CHANGE_REQUIRED';
+      throw err;
     }
 
     return next();

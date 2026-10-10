@@ -1,9 +1,15 @@
 import asyncHandler from 'express-async-handler';
 import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
-import { parsePagination } from '../utils/queryHelpers.js';
+import { parsePagination, pick } from '../utils/queryHelpers.js';
 import Student from '../models/Student.js';
 import User from '../models/User.js';
 import { escapeRegex } from '../utils/escapeRegex.js';
+
+const STUDENT_FIELDS = [
+  'firstName', 'lastName', 'dateOfBirth', 'gender', 'admissionNumber', 'admissionDate',
+  'class', 'section', 'rollNumber', 'bloodGroup', 'medicalInfo', 'photoUrl', 'parent',
+  'emergencyContact', 'address', 'academicYear', 'status',
+];
 
 const CLASS_ORDER = ['Jr. KG', 'Sr. KG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 
@@ -86,7 +92,7 @@ export const createStudent = asyncHandler(async (req, res) => {
     }
   }
 
-  const student = await Student.create(req.body);
+  const student = await Student.create(pick(req.body, STUDENT_FIELDS));
 
   // Add student to parent's children array
   if (student.parent) {
@@ -118,29 +124,32 @@ export const updateStudent = asyncHandler(async (req, res) => {
     throw new Error('Student not found');
   }
 
-  // If parent is changing, update both old and new parent's children arrays
-  if (req.body.parent && req.body.parent !== student.parent?.toString()) {
-    const newParent = await User.findById(req.body.parent);
+  const update = pick(req.body, STUDENT_FIELDS);
+  const oldParentId = student.parent?.toString();
+  const parentChanging = update.parent && String(update.parent) !== oldParentId;
+
+  if (parentChanging) {
+    const newParent = await User.findById(update.parent);
     if (!newParent || newParent.role !== 'parent') {
       res.status(400);
       throw new Error('Invalid parent reference');
     }
-    if (student.parent) {
-      await User.findByIdAndUpdate(student.parent, {
-        $pull: { children: student._id },
-      });
-    }
-    await User.findByIdAndUpdate(req.body.parent, {
-      $addToSet: { children: student._id },
-    });
   }
 
   const beforeDoc = snapshot(student);
 
-  student = await Student.findByIdAndUpdate(req.params.id, req.body, {
+  student = await Student.findByIdAndUpdate(req.params.id, update, {
     new: true,
     runValidators: true,
   }).populate('parent', 'firstName lastName email phone');
+
+  // Only relink parents once the student update has succeeded
+  if (parentChanging) {
+    if (oldParentId) {
+      await User.findByIdAndUpdate(oldParentId, { $pull: { children: student._id } });
+    }
+    await User.findByIdAndUpdate(update.parent, { $addToSet: { children: student._id } });
+  }
 
   await logAudit(req, { action: 'update', entity: 'Student', entityId: student._id, ...diffSnapshots(beforeDoc, student) });
 

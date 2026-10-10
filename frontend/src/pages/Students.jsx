@@ -10,7 +10,7 @@ import { studentApi } from '../api/studentApi';
 import { userApi } from '../api/userApi';
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
-import { formatDate, getStatusColor, getCurrentAcademicYear, getAcademicYearOptions } from '../utils/formatters';
+import { formatDate, getStatusColor, getCurrentAcademicYear, getAcademicYearOptions, getTodayISO } from '../utils/formatters';
 
 const Students = () => {
   const dispatch = useDispatch();
@@ -35,7 +35,7 @@ const Students = () => {
   const [promoteData, setPromoteData] = useState({ fromClass: '', newAcademicYear: '', resetRollNumber: false });
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', dateOfBirth: '', gender: 'male',
-    admissionNumber: '', admissionDate: new Date().toISOString().split('T')[0],
+    admissionNumber: '', admissionDate: getTodayISO(),
     class: '', section: '', rollNumber: '', parent: '', academicYear: getCurrentAcademicYear(),
     bloodGroup: '', address: { street: '', city: '', state: '', zipCode: '' },
     emergencyContact: { name: '', relationship: '', phone: '' },
@@ -52,7 +52,7 @@ const Students = () => {
   const resetForm = () => {
     setFormData({
       firstName: '', lastName: '', dateOfBirth: '', gender: 'male',
-      admissionNumber: '', admissionDate: new Date().toISOString().split('T')[0],
+      admissionNumber: '', admissionDate: getTodayISO(),
       class: '', section: '', rollNumber: '', parent: '', academicYear: getCurrentAcademicYear(),
       bloodGroup: '', address: { street: '', city: '', state: '', zipCode: '' },
       emergencyContact: { name: '', relationship: '', phone: '' },
@@ -63,11 +63,33 @@ const Students = () => {
   const handleOpenForm = (student = null) => {
     if (student) {
       setEditingStudent(student);
+      // Only editable fields (no _id/__v/timestamps/populated objects); address and
+      // emergencyContact default to empty strings since older records may lack them.
       setFormData({
-        ...student,
+        firstName: student.firstName || '',
+        lastName: student.lastName || '',
+        gender: student.gender || 'male',
+        admissionNumber: student.admissionNumber || '',
+        class: student.class || '',
+        section: student.section || '',
+        rollNumber: student.rollNumber || '',
+        bloodGroup: student.bloodGroup || '',
+        academicYear: student.academicYear || getCurrentAcademicYear(),
+        status: student.status,
         dateOfBirth: student.dateOfBirth?.split('T')[0] || '',
         admissionDate: student.admissionDate?.split('T')[0] || '',
         parent: student.parent?._id || student.parent || '',
+        address: {
+          street: student.address?.street || '',
+          city: student.address?.city || '',
+          state: student.address?.state || '',
+          zipCode: student.address?.zipCode || '',
+        },
+        emergencyContact: {
+          name: student.emergencyContact?.name || '',
+          relationship: student.emergencyContact?.relationship || '',
+          phone: student.emergencyContact?.phone || '',
+        },
       });
     } else {
       resetForm();
@@ -99,6 +121,7 @@ const Students = () => {
 
   const handleAddParent = async (e) => {
     e.preventDefault();
+    if (creatingParent) return;
     setCreatingParent(true);
     try {
       const res = await userApi.create({ ...parentFormData, role: 'parent' });
@@ -135,7 +158,9 @@ const Students = () => {
   };
 
   const handlePromoteSubmit = async () => {
-    if (!promoteData.fromClass) return;
+    if (!promoteData.fromClass || promoting) return;
+    const countText = promotePreviewCount !== null ? `${promotePreviewCount} student(s)` : 'all students';
+    if (!window.confirm(`Promote ${countText} from ${promoteData.fromClass} to ${promoteToClass}? This cannot be easily undone.`)) return;
     setPromoting(true);
     try {
       const res = await studentApi.promote({

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { HiOutlinePlus, HiOutlineDownload, HiOutlinePrinter, HiOutlinePencil, HiOutlineTrash } from 'react-icons/hi';
 import { toast } from 'react-toastify';
 import { institutionApi, openingBalanceApi, ledgerApi } from '../api/accountsApi';
@@ -13,7 +13,7 @@ import CategoryBreakdownList from '../components/accounts/CategoryBreakdownList'
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
 import StatsCard from '../components/dashboard/StatsCard';
-import { formatCurrency, getCurrentFinancialYear } from '../utils/formatters';
+import { formatCurrency, getCurrentFinancialYear, getTodayISO } from '../utils/formatters';
 import { HiOutlineCurrencyRupee, HiOutlineTrendingUp, HiOutlineTrendingDown, HiOutlineScale } from 'react-icons/hi';
 
 const tabs = [
@@ -25,7 +25,7 @@ const tabs = [
 
 const defaultTxForm = {
   type: 'income', institution: '', category: 'fees',
-  date: new Date().toISOString().split('T')[0], amount: '',
+  date: getTodayISO(), amount: '',
   paymentMode: '', referenceNo: '', description: '', remarks: '',
 };
 
@@ -45,6 +45,8 @@ const Accounts = () => {
   // Transactions
   const [transactions, setTransactions] = useState([]);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const submittingRef = useRef(false);
   const [typeFilter, setTypeFilter] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   const [showTxForm, setShowTxForm] = useState(false);
@@ -75,6 +77,12 @@ const Accounts = () => {
 
   useEffect(() => { loadInstitutions(); }, [loadInstitutions]);
 
+  // Wait for the user to stop typing before hitting the API
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
@@ -95,7 +103,7 @@ const Accounts = () => {
     setLoading(true);
     try {
       const params = { institution: selectedInstitution, financialYear, limit: 500 };
-      if (search) params.search = search;
+      if (debouncedSearch) params.search = debouncedSearch;
       if (typeFilter) params.type = typeFilter;
       if (monthFilter) params.month = monthFilter;
       const res = await ledgerApi.getTransactions(params);
@@ -105,7 +113,7 @@ const Accounts = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedInstitution, financialYear, search, typeFilter, monthFilter]);
+  }, [selectedInstitution, financialYear, debouncedSearch, typeFilter, monthFilter]);
 
   const loadInstitutionsTabData = useCallback(async () => {
     try {
@@ -157,6 +165,7 @@ const Accounts = () => {
       setEditingTx(null);
       setTxFormData({
         ...defaultTxForm,
+        date: getTodayISO(),
         institution: selectedInstitution !== 'all' ? selectedInstitution : '',
       });
     }
@@ -308,7 +317,7 @@ const Accounts = () => {
         </div>
       </div>
 
-      {loading ? <Loader /> : (
+      {loading && ((activeTab === 'dashboard' && !dashboard) || (activeTab === 'transactions' && transactions.length === 0) || (activeTab === 'reports' && monthlySummary.length === 0)) ? <Loader /> : (
         <>
           {/* DASHBOARD TAB */}
           {activeTab === 'dashboard' && dashboard && (

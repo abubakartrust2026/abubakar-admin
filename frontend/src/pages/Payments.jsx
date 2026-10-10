@@ -9,7 +9,7 @@ import { paymentApi, invoiceApi } from '../api/feeApi';
 import { studentApi } from '../api/studentApi';
 import Modal from '../components/common/Modal';
 import Loader from '../components/common/Loader';
-import { formatDate, formatCurrency, getStatusColor } from '../utils/formatters';
+import { formatDate, formatCurrency, getStatusColor, getTodayISO } from '../utils/formatters';
 
 const PAYMENT_METHODS = ['cash', 'card', 'online', 'bank_transfer', 'cheque'];
 
@@ -33,9 +33,12 @@ const Payments = () => {
   const [pendingReceipt, setPendingReceipt] = useState(null);
   const [formData, setFormData] = useState({
     invoice: '', amount: '', paymentMethod: 'cash', remarks: '',
-    transactionDate: new Date().toISOString().split('T')[0],
+    transactionDate: getTodayISO(),
   });
   const fileInputRef = useRef(null);
+  const studentRequestRef = useRef(0);
+  const invoiceRequestRef = useRef(0);
+  const submittingRef = useRef(false);
   const [importRows, setImportRows] = useState([]);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -81,29 +84,37 @@ const Payments = () => {
     setSelectedInvoice(null);
     setFormData(prev => ({ ...prev, invoice: '', amount: '' }));
     setInvoicesLoading(true);
+    const requestId = ++studentRequestRef.current;
     try {
-      const [pendingRes, partialRes] = await Promise.all([
+      const [pendingRes, partialRes, overdueRes] = await Promise.all([
         invoiceApi.getAll({ studentId: student._id, status: 'pending', limit: 50 }),
         invoiceApi.getAll({ studentId: student._id, status: 'partially_paid', limit: 50 }),
+        invoiceApi.getAll({ studentId: student._id, status: 'overdue', limit: 50 }),
       ]);
-      setStudentInvoices([...pendingRes.data.data, ...partialRes.data.data]);
+      if (requestId !== studentRequestRef.current) return; // a newer selection superseded this one
+      setStudentInvoices([...pendingRes.data.data, ...partialRes.data.data, ...overdueRes.data.data]);
     } catch (err) {
+      if (requestId !== studentRequestRef.current) return;
       toast.error('Failed to load invoices for this student');
       setStudentInvoices([]);
     } finally {
-      setInvoicesLoading(false);
+      if (requestId === studentRequestRef.current) setInvoicesLoading(false);
     }
   };
 
   const handleInvoiceSelect = async (invoiceId) => {
     setFormData(prev => ({ ...prev, invoice: invoiceId }));
+    const requestId = ++invoiceRequestRef.current;
     if (invoiceId) {
       try {
         const res = await invoiceApi.getById(invoiceId);
+        if (requestId !== invoiceRequestRef.current) return;
         setSelectedInvoice(res.data.data);
-        setFormData(prev => ({ ...prev, amount: res.data.data.amountDue || res.data.data.total }));
+        // ?? (not ||) so a fully paid invoice (amountDue 0) isn't prefilled with the total
+        setFormData(prev => ({ ...prev, amount: res.data.data.amountDue ?? res.data.data.total }));
       } catch (err) {
-        console.error(err);
+        if (requestId !== invoiceRequestRef.current) return;
+        toast.error('Failed to load invoice details');
       }
     } else {
       setSelectedInvoice(null);
@@ -136,7 +147,8 @@ Abubakar English School`;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       const res = await paymentApi.create({
@@ -152,10 +164,11 @@ Abubakar English School`;
 
       setShowForm(false);
       resetForm();
-      dispatch(fetchPayments({ page, limit: 10 }));
+      dispatch(fetchPayments({ page, limit: 10, search: search || undefined }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to record payment');
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -181,7 +194,7 @@ Abubakar English School`;
     setSelectedInvoice(null);
     setFormData({
       invoice: '', amount: '', paymentMethod: 'cash', remarks: '',
-      transactionDate: new Date().toISOString().split('T')[0],
+      transactionDate: getTodayISO(),
     });
   };
 
@@ -215,7 +228,7 @@ Abubakar English School`;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `payments_${new Date().toISOString().split('T')[0]}.csv`;
+      link.download = `payments_${getTodayISO()}.csv`;
       link.click();
       URL.revokeObjectURL(url);
       toast.success(`Exported ${allPayments.length} payments`);
@@ -226,7 +239,8 @@ Abubakar English School`;
 
   const validateImportRow = (row) => {
     const invoiceNumber = (row['Invoice #'] || row.invoiceNumber || '').trim();
-    const amount = parseFloat(row['Amount'] || row.amount);
+    // strip thousands separators/currency symbols ("1,500" would otherwise parse as 1)
+    const amount = parseFloat(String(row['Amount'] || row.amount || '').replace(/[^0-9.]/g, ''));
     const paymentMethod = (row['Payment Method'] || row.paymentMethod || '').trim().toLowerCase();
     const transactionDate = (row['Transaction Date'] || row.transactionDate || '').trim();
     const remarks = (row['Remarks'] || row.remarks || '').trim();
@@ -276,7 +290,7 @@ Abubakar English School`;
       const { created, failed } = res.data.data;
       if (created.length > 0) {
         toast.success(`${created.length} payment(s) imported successfully`);
-        dispatch(fetchPayments({ page, limit: 10 }));
+        dispatch(fetchPayments({ page, limit: 10, search: search || undefined }));
       }
       if (failed.length > 0) {
         toast.warn(`${failed.length} row(s) failed — see preview for details`);
@@ -492,7 +506,7 @@ Abubakar English School`;
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Amount (INR) *</label>
-                  <input type="number" className="input-field" required min="1" value={formData.amount}
+                  <input type="number" className="input-field" required min="0.01" step="0.01" max={selectedInvoice?.amountDue ?? undefined} value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })} />
                 </div>
                 <div>
