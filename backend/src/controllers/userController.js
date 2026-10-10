@@ -1,9 +1,14 @@
+import { randomInt } from 'crypto';
 import asyncHandler from 'express-async-handler';
 import { logAudit, snapshot, diffSnapshots } from '../utils/audit.js';
-import { parsePagination } from '../utils/queryHelpers.js';
+import { parsePagination, pick } from '../utils/queryHelpers.js';
 import User from '../models/User.js';
 import Student from '../models/Student.js';
 import { escapeRegex } from '../utils/escapeRegex.js';
+
+// `children` is maintained via Student.parent links, never set directly
+const USER_CREATE_FIELDS = ['firstName', 'lastName', 'email', 'password', 'role', 'phone', 'address', 'isActive'];
+const USER_UPDATE_FIELDS = ['firstName', 'lastName', 'email', 'role', 'phone', 'address', 'isActive'];
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -67,7 +72,7 @@ export const createUser = asyncHandler(async (req, res) => {
     throw new Error('User with this email already exists');
   }
 
-  const user = await User.create(req.body);
+  const user = await User.create(pick(req.body, USER_CREATE_FIELDS));
 
   await logAudit(req, { action: 'create', entity: 'User', entityId: user._id, after: snapshot(user) });
 
@@ -101,7 +106,7 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   const beforeDoc = snapshot(user);
 
-  const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, {
+  const updatedUser = await User.findByIdAndUpdate(req.params.id, pick(req.body, USER_UPDATE_FIELDS), {
     new: true,
     runValidators: true,
   });
@@ -152,6 +157,96 @@ export const deleteUser = asyncHandler(async (req, res) => {
     success: true,
     message: 'User deleted successfully',
   });
+});
+
+// Random 8-char fallback password; skips look-alike characters (0/O, 1/l/I) so it's easy to read out
+const TEMP_PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+const generateTempPassword = () =>
+  Array.from({ length: 8 }, () => TEMP_PASSWORD_CHARS[randomInt(TEMP_PASSWORD_CHARS.length)]).join('');
+
+// Initial password = the parent's first active child's admission number (same as the username),
+// so parents have nothing extra to remember. A change is forced at first login, so it never stays.
+// Falls back to a random password when there's no usable admission number (User needs 6+ chars).
+const initialPasswordFor = (students) => {
+  const admissionNumber = students.map((s) => String(s.admissionNumber || '').trim()).sort()[0];
+  return admissionNumber && admissionNumber.length >= 6 ? admissionNumber : generateTempPassword();
+};
+
+// Sets the initial password (hashed by the pre-save hook) and forces a change on next login
+const issueTempPassword = async (user, students) => {
+  const tempPassword = initialPasswordFor(students);
+  user.password = tempPassword;
+  user.mustChangePassword = true;
+  await user.save();
+  return tempPassword;
+};
+
+// @desc    Issue a temporary password for one parent
+// @route   POST /api/users/:id/reset-parent-password
+// @access  Private/Admin
+export const resetParentPassword = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user || user.role !== 'parent') {
+    res.status(404);
+    throw new Error('Parent not found');
+  }
+
+  const students = await Student.find({ parent: user._id, status: 'active' }).select('firstName lastName class admissionNumber');
+  const tempPassword = await issueTempPassword(user, students);
+
+  // The password itself is deliberately not written to the audit log
+  await logAudit(req, { action: 'update', entity: 'User', entityId: user._id, before: { passwordReset: false }, after: { passwordReset: true } });
+
+  res.status(200).json({
+    success: true,
+    message: 'Temporary password generated. Share it with the parent; it is shown only once.',
+    data: {
+      parentName: user.getFullName(),
+      tempPassword,
+      students: students.map((s) => ({ admissionNumber: s.admissionNumber, name: `${s.firstName} ${s.lastName}`, class: s.class })),
+    },
+  });
+});
+
+// @desc    Issue temporary passwords for many parents (for a credentials sheet)
+// @route   POST /api/users/parent-credentials/bulk
+// @access  Private/Admin
+export const bulkParentCredentials = asyncHandler(async (req, res) => {
+  const { parentIds, class: studentClass, all } = req.body;
+
+  // Resetting overwrites passwords parents may already be using, so a scope must be explicit
+  let parentFilter;
+  if (Array.isArray(parentIds) && parentIds.length) {
+    parentFilter = { _id: { $in: parentIds } };
+  } else if (studentClass) {
+    const ids = await Student.distinct('parent', { class: studentClass, status: 'active' });
+    parentFilter = { _id: { $in: ids } };
+  } else if (all === true) {
+    parentFilter = {};
+  } else {
+    res.status(400);
+    throw new Error('Provide parentIds, a class, or all: true');
+  }
+
+  const parents = await User.find({ ...parentFilter, role: 'parent', isActive: true });
+  const rows = [];
+  for (const parent of parents) {
+    const students = await Student.find({ parent: parent._id, status: 'active' }).select('firstName lastName class admissionNumber');
+    const tempPassword = await issueTempPassword(parent, students);
+    students.forEach((s) => {
+      rows.push({
+        admissionNumber: s.admissionNumber,
+        studentName: `${s.firstName} ${s.lastName}`,
+        class: s.class,
+        parentName: parent.getFullName(),
+        tempPassword,
+      });
+    });
+  }
+
+  await logAudit(req, { action: 'update', entity: 'User', entityId: req.user._id, before: {}, after: { bulkParentPasswordReset: parents.length } });
+
+  res.status(200).json({ success: true, message: `Temporary passwords issued for ${parents.length} parent(s)`, data: rows });
 });
 
 // @desc    Get all parent users

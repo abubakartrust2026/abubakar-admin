@@ -10,6 +10,8 @@ import {
   HiOutlineChartBar,
   HiOutlineArchive,
   HiOutlineCalculator,
+  HiOutlineQrcode,
+  HiOutlineLockClosed,
 } from 'react-icons/hi';
 
 const Sidebar = () => {
@@ -26,11 +28,14 @@ const Sidebar = () => {
     { to: '/reports', icon: HiOutlineChartBar, label: 'Reports' },
     { to: '/inventory', icon: HiOutlineArchive, label: 'Inventory' },
     { to: '/accounts', icon: HiOutlineCalculator, label: 'Accounts' },
+    { to: '/parent-app', icon: HiOutlineQrcode, label: 'Parent App' },
   ];
 
   const parentLinks = [
     { to: '/dashboard', icon: HiOutlineHome, label: 'Dashboard' },
+    { to: '/invoices', icon: HiOutlineDocumentText, label: 'Invoices' },
     { to: '/payments', icon: HiOutlineCreditCard, label: 'Payments' },
+    { to: '/change-password', icon: HiOutlineLockClosed, label: 'Change Password' },
   ];
 
   const links = user?.role === 'admin' ? adminLinks : parentLinks;

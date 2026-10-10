@@ -6,26 +6,37 @@ import Invoice from '../models/Invoice.js';
 import Student from '../models/Student.js';
 import { PAYMENT_METHOD } from '../config/constants.js';
 import { escapeRegex } from '../utils/escapeRegex.js';
+import { syncPaymentCounter } from '../utils/paymentCounter.js';
 
-// Number of times to re-fetch the invoice and retry invoice.save() when a
-// concurrent payment updates it first (Mongoose optimistic-concurrency
-// VersionError). 2 attempts total = 1 retry.
-const MAX_INVOICE_SAVE_ATTEMPTS = 2;
+// Money is compared in integer paise to avoid float rounding (0.1 + 0.2 !== 0.3).
+const toPaise = (n) => Math.round(Number(n) * 100);
+
+const sumCompleted = async (invoiceId) => {
+  const payments = await Payment.find({ invoice: invoiceId, status: 'completed' });
+  return payments.reduce((sum, p) => sum + toPaise(p.amount), 0) / 100;
+};
 
 // Recomputes an invoice's status from its completed payments. Called after every
 // payment create/update/delete so the invoice never drifts from the payment records.
+// Written with updateOne (not doc.save) from a freshly computed sum; if the sum
+// changed while writing, it is recomputed once more.
 const recalcInvoiceStatus = async (invoiceId) => {
-  const invoice = await Invoice.findById(invoiceId);
-  if (!invoice || invoice.status === 'cancelled') return invoice;
+  let invoice;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    invoice = await Invoice.findById(invoiceId);
+    if (!invoice || invoice.status === 'cancelled') return invoice;
 
-  const payments = await Payment.find({ invoice: invoice._id, status: 'completed' });
-  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const totalPaid = await sumCompleted(invoice._id);
+    let status;
+    if (toPaise(totalPaid) >= toPaise(invoice.total) && totalPaid > 0) status = 'paid';
+    else if (totalPaid > 0) status = 'partially_paid';
+    else status = invoice.dueDate && new Date() > invoice.dueDate ? 'overdue' : 'pending';
 
-  if (totalPaid >= invoice.total) invoice.status = 'paid';
-  else if (totalPaid > 0) invoice.status = 'partially_paid';
-  else invoice.status = invoice.dueDate && new Date() > invoice.dueDate ? 'overdue' : 'pending';
+    await Invoice.updateOne({ _id: invoice._id }, { $set: { status } });
+    invoice.status = status;
 
-  await invoice.save();
+    if ((await sumCompleted(invoice._id)) === totalPaid) break;
+  }
   return invoice;
 };
 
@@ -48,11 +59,10 @@ const recordPaymentForInvoice = async (invoice, paymentData, userId) => {
     throw new Error('Cannot record a payment against a cancelled invoice');
   }
 
-  const existingPayments = await Payment.find({ invoice: invoice._id, status: 'completed' });
-  const totalPaid = existingPayments.reduce((sum, p) => sum + p.amount, 0);
-  const amountDue = invoice.total - totalPaid;
+  const totalPaid = await sumCompleted(invoice._id);
+  const amountDue = (toPaise(invoice.total) - toPaise(totalPaid)) / 100;
 
-  if (amount > amountDue) {
+  if (toPaise(amount) > toPaise(amountDue)) {
     throw new Error(`Payment amount exceeds amount due (${amountDue})`);
   }
 
@@ -61,48 +71,48 @@ const recordPaymentForInvoice = async (invoice, paymentData, userId) => {
     if (paymentData[f] !== undefined) allowed[f] = paymentData[f];
   });
 
-  const payment = await Payment.create({
+  const paymentDoc = {
     ...allowed,
     amount,
     invoice: invoice._id,
     student: invoice.student,
     parent: invoice.parent,
     receivedBy: userId,
-  });
+  };
+
+  // If the payment counter has fallen behind existing payment numbers, a
+  // duplicate-key error occurs; resync the counter and retry.
+  let payment;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      payment = await Payment.create(paymentDoc);
+      break;
+    } catch (err) {
+      const isNumberClash =
+        Number(err.code) === 11000 && (err.keyValue?.paymentNumber || err.keyValue?.receiptNumber);
+      if (!isNumberClash || attempt >= 3) throw err;
+      await syncPaymentCounter();
+    }
+  }
 
   // The check above isn't atomic with the create, so a concurrent payment on
   // the same invoice could have landed in between. Recheck against every
   // completed payment (this one included) before finalizing the invoice, and
   // undo this payment rather than silently allow the invoice to be overpaid.
-  let currentInvoice = invoice;
-  for (let attempt = 1; ; attempt += 1) {
-    const paidSoFar = (await Payment.find({ invoice: invoice._id, status: 'completed' })).reduce(
-      (sum, p) => sum + p.amount,
-      0
-    );
+  const paidSoFar = await sumCompleted(invoice._id);
+  if (toPaise(paidSoFar) > toPaise(invoice.total)) {
+    await Payment.findByIdAndDelete(payment._id);
+    throw new Error('Payment could not be recorded: a concurrent payment already covers the amount due');
+  }
 
-    if (paidSoFar > currentInvoice.total) {
-      await Payment.findByIdAndDelete(payment._id);
-      throw new Error('Payment could not be recorded: a concurrent payment already covers the amount due');
-    }
-
-    if (paidSoFar >= currentInvoice.total) {
-      currentInvoice.status = 'paid';
-    } else if (paidSoFar > 0) {
-      currentInvoice.status = 'partially_paid';
-    }
-
-    try {
-      await currentInvoice.save();
-      break;
-    } catch (err) {
-      if (err.name === 'VersionError' && attempt < MAX_INVOICE_SAVE_ATTEMPTS) {
-        currentInvoice = await Invoice.findById(invoice._id);
-        continue;
-      }
-      await Payment.findByIdAndDelete(payment._id);
-      throw err;
-    }
+  try {
+    // Status is recomputed from the payments sum right before an atomic write
+    // (not from the possibly stale invoice document), so concurrent payments
+    // can't leave a fully paid invoice marked partially_paid.
+    await recalcInvoiceStatus(invoice._id);
+  } catch (err) {
+    await Payment.findByIdAndDelete(payment._id);
+    throw err;
   }
 
   return populatePayment(payment._id);

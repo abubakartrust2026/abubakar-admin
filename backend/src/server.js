@@ -52,7 +52,7 @@ const loginLimiter = rateLimit({
   max: 20,
   message: { success: false, message: 'Too many login attempts, please try again later.' },
 });
-app.use('/api/auth/login', loginLimiter);
+app.use(['/api/auth/login', '/api/auth/parent-login'], loginLimiter);
 app.use('/api/', limiter);
 
 // CORS configuration

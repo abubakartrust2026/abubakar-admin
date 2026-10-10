@@ -6,7 +6,7 @@ import { fetchAttendance } from '../store/slices/attendanceSlice';
 import { attendanceApi } from '../api/attendanceApi';
 import { studentApi } from '../api/studentApi';
 import Loader from '../components/common/Loader';
-import { formatDate, getStatusColor } from '../utils/formatters';
+import { formatDate, getStatusColor, getTodayISO } from '../utils/formatters';
 
 const CLASS_ORDER = ['Jr. KG', 'Sr. KG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 const formatClassLabel = (c) => (c.startsWith('Jr') || c.startsWith('Sr') ? c : `Class ${c}`);
@@ -15,13 +15,14 @@ const Attendance = () => {
   const dispatch = useDispatch();
   const { records, loading } = useSelector((state) => state.attendance);
   const [selectedClass, setSelectedClass] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getTodayISO());
   const [students, setStudents] = useState([]);
   const [attendanceData, setAttendanceData] = useState({});
   const [markingMode, setMarkingMode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!selectedDate) return;
     dispatch(fetchAttendance({ date: selectedDate, class: selectedClass || undefined }));
   }, [dispatch, selectedDate, selectedClass]);
 
@@ -30,14 +31,23 @@ const Attendance = () => {
       toast.error('Please select a class');
       return;
     }
+    if (!selectedDate) {
+      toast.error('Please select a date');
+      return;
+    }
     try {
-      const res = await studentApi.getByClass(selectedClass);
+      // Fetch existing attendance fresh for this exact date/class instead of using
+      // Redux records, which may still hold the previous selection while loading.
+      const [res, existingRes] = await Promise.all([
+        studentApi.getByClass(selectedClass),
+        attendanceApi.getAll({ date: selectedDate, class: selectedClass, limit: 500 }),
+      ]);
       const studentList = res.data.data;
       setStudents(studentList);
 
       // Pre-fill existing attendance
       const existing = {};
-      records.forEach(r => {
+      (existingRes.data.data || []).forEach(r => {
         if (r.student) existing[r.student._id] = r.status;
       });
       const initial = {};
@@ -52,6 +62,7 @@ const Attendance = () => {
   };
 
   const handleBulkSubmit = async () => {
+    if (submitting) return;
     setSubmitting(true);
     try {
       const bulkRecords = Object.entries(attendanceData).map(([studentId, status]) => ({

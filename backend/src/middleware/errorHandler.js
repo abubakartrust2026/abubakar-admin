@@ -37,6 +37,8 @@ export const errorHandler = (err, req, res, next) => {
   res.status(statusCode).json({
     success: false,
     message: isServerError && process.env.NODE_ENV !== 'development' ? 'Internal server error' : err.message,
+    // app-defined machine-readable codes (e.g. PASSWORD_CHANGE_REQUIRED); skips driver/system codes
+    ...(typeof err.code === 'string' && /^[A-Z_]+$/.test(err.code) && !isServerError && { code: err.code }),
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };

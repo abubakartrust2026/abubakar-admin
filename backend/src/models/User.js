@@ -54,6 +54,11 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Set when an admin issues a temporary password; cleared once the user picks their own
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
@@ -102,6 +107,7 @@ userSchema.methods.toPublicJSON = function () {
     address: this.address,
     children: this.children,
     isActive: this.isActive,
+    mustChangePassword: this.mustChangePassword,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };

@@ -17,6 +17,7 @@ export const getFeeCollectionReport = asyncHandler(async (req, res) => {
     { $match: matchStage },
     { $lookup: { from: 'students', localField: 'student', foreignField: '_id', as: 'studentInfo' } },
     { $unwind: '$studentInfo' },
+    { $match: { 'studentInfo.isDeleted': { $ne: true } } },
     ...(classFilter ? [{ $match: { 'studentInfo.class': classFilter } }] : []),
   ];
 
@@ -68,15 +69,17 @@ export const getOutstandingDuesReport = asyncHandler(async (req, res) => {
     { $match: { status: { $in: ['pending', 'partially_paid'] } } },
     { $lookup: { from: 'students', localField: 'student', foreignField: '_id', as: 'studentInfo' } },
     { $unwind: '$studentInfo' },
+    { $match: { 'studentInfo.isDeleted': { $ne: true } } },
     ...(classFilter ? [{ $match: { 'studentInfo.class': classFilter } }] : []),
     { $lookup: { from: 'users', localField: 'parent', foreignField: '_id', as: 'parentInfo' } },
     { $unwind: '$parentInfo' },
+    { $match: { 'parentInfo.isDeleted': { $ne: true } } },
     {
       $lookup: {
         from: 'payments',
         let: { invoiceId: '$_id' },
         pipeline: [
-          { $match: { $expr: { $eq: ['$invoice', '$$invoiceId'] }, status: 'completed' } },
+          { $match: { $expr: { $eq: ['$invoice', '$$invoiceId'] }, status: 'completed', isDeleted: { $ne: true } } },
           { $group: { _id: null, totalPaid: { $sum: '$amount' } } },
         ],
         as: 'paymentInfo',
@@ -115,13 +118,14 @@ export const getOutstandingDuesReport = asyncHandler(async (req, res) => {
     { $match: { status: { $in: ['pending', 'partially_paid'] } } },
     { $lookup: { from: 'students', localField: 'student', foreignField: '_id', as: 'studentInfo' } },
     { $unwind: '$studentInfo' },
+    { $match: { 'studentInfo.isDeleted': { $ne: true } } },
     ...(classFilter ? [{ $match: { 'studentInfo.class': classFilter } }] : []),
     {
       $lookup: {
         from: 'payments',
         let: { invoiceId: '$_id' },
         pipeline: [
-          { $match: { $expr: { $eq: ['$invoice', '$$invoiceId'] }, status: 'completed' } },
+          { $match: { $expr: { $eq: ['$invoice', '$$invoiceId'] }, status: 'completed', isDeleted: { $ne: true } } },
           { $group: { _id: null, totalPaid: { $sum: '$amount' } } },
         ],
         as: 'paymentInfo',
@@ -166,9 +170,11 @@ export const getPaymentHistoryReport = asyncHandler(async (req, res) => {
     { $match: matchStage },
     { $lookup: { from: 'students', localField: 'student', foreignField: '_id', as: 'studentInfo' } },
     { $unwind: '$studentInfo' },
+    { $match: { 'studentInfo.isDeleted': { $ne: true } } },
     ...(classFilter ? [{ $match: { 'studentInfo.class': classFilter } }] : []),
     { $lookup: { from: 'invoices', localField: 'invoice', foreignField: '_id', as: 'invoiceInfo' } },
     { $unwind: '$invoiceInfo' },
+    { $match: { 'invoiceInfo.isDeleted': { $ne: true } } },
     { $sort: { transactionDate: -1 } },
   ];
 
@@ -195,6 +201,7 @@ export const getPaymentHistoryReport = asyncHandler(async (req, res) => {
     { $match: matchStage },
     { $lookup: { from: 'students', localField: 'student', foreignField: '_id', as: 'studentInfo' } },
     { $unwind: '$studentInfo' },
+    { $match: { 'studentInfo.isDeleted': { $ne: true } } },
     ...(classFilter ? [{ $match: { 'studentInfo.class': classFilter } }] : []),
     { $group: { _id: '$paymentMethod', totalAmount: { $sum: '$amount' }, count: { $sum: 1 } } },
     { $sort: { totalAmount: -1 } },
@@ -229,12 +236,13 @@ export const getClassWiseFeeSummary = asyncHandler(async (req, res) => {
     { $match: invoiceMatch },
     { $lookup: { from: 'students', localField: 'student', foreignField: '_id', as: 'studentInfo' } },
     { $unwind: '$studentInfo' },
+    { $match: { 'studentInfo.isDeleted': { $ne: true } } },
     {
       $lookup: {
         from: 'payments',
         let: { invoiceId: '$_id' },
         pipeline: [
-          { $match: { $expr: { $eq: ['$invoice', '$$invoiceId'] }, status: 'completed' } },
+          { $match: { $expr: { $eq: ['$invoice', '$$invoiceId'] }, status: 'completed', isDeleted: { $ne: true } } },
           { $group: { _id: null, totalPaid: { $sum: '$amount' } } },
         ],
         as: 'paymentInfo',

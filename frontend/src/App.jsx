@@ -13,6 +13,9 @@ import Reports from './pages/Reports';
 import Inventory from './pages/Inventory';
 import Accounts from './pages/Accounts';
 import NotFound from './pages/NotFound';
+import ParentLogin from './pages/ParentLogin';
+import ChangePassword from './pages/ChangePassword';
+import ParentApp from './pages/ParentApp';
 
 // Layouts & Auth
 import MainLayout from './components/layout/MainLayout';
@@ -24,6 +27,8 @@ function App() {
     <Routes>
       {/* Public Routes */}
       <Route path="/login" element={<Login />} />
+      <Route path="/parent/login" element={<ParentLogin />} />
+      <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
 
       {/* Protected Routes */}
       <Route
@@ -47,6 +52,7 @@ function App() {
         <Route path="reports" element={<RoleBasedRoute allowedRoles={['admin']}><Reports /></RoleBasedRoute>} />
         <Route path="inventory" element={<RoleBasedRoute allowedRoles={['admin']}><Inventory /></RoleBasedRoute>} />
         <Route path="accounts" element={<RoleBasedRoute allowedRoles={['admin']}><Accounts /></RoleBasedRoute>} />
+        <Route path="parent-app" element={<RoleBasedRoute allowedRoles={['admin']}><ParentApp /></RoleBasedRoute>} />
       </Route>
 
       {/* 404 Route */}

@@ -75,3 +75,9 @@ export const getStatusColor = (status) => {
   };
   return colors[status] || 'bg-gray-100 text-gray-800';
 };
+// Today's date as YYYY-MM-DD in the user's local timezone (toISOString() gives the UTC date,
+// which is the previous day in India between 00:00 and 05:30)
+export const getTodayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};

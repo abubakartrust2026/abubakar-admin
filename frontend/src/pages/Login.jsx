@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { HiOutlineMail, HiOutlineLockClosed, HiOutlineEye, HiOutlineEyeOff } from 'react-icons/hi';
 import { toast } from 'react-toastify';
 import AuthLayout from '../components/layout/AuthLayout';
 import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
 import { authApi } from '../api/authApi';
+import { setLoginPortal } from '../utils/portal';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -32,6 +33,7 @@ const Login = () => {
         token: res.data.token,
         refreshToken: res.data.refreshToken,
       }));
+      setLoginPortal('admin');
       toast.success('Login successful!');
       navigate('/dashboard');
     } catch (err) {
@@ -102,6 +104,10 @@ const Login = () => {
           )}
         </button>
       </form>
+
+      <p className="text-center text-sm text-gray-500 mt-6">
+        Are you a parent? <Link to="/parent/login" className="text-primary-700 font-medium hover:underline">Parent Login</Link>
+      </p>
     </AuthLayout>
   );
 };
